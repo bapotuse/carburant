@@ -1,0 +1,97 @@
+/* Polices auto-hebergees (Fontsource), sous-ensemble latin uniquement.
+ *
+ * Trois paires sont declarees pour la planche de style du Jalon 0 : une seule sera
+ * retenue apres validation, les deux autres et leurs fichiers seront supprimes.
+ *
+ * Aucune police sur-representee dans les sites generes : ni Inter, ni Poppins, ni
+ * Montserrat, ni Roboto, ni Open Sans, ni Playfair Display.
+ *
+ * Les chiffres tabulaires ont ete VERIFIES PAR MESURE, pas supposes : on rend
+ * « 0123456789 » et « 1111111111 » dans chaque police et on compare les largeurs
+ * (tests/unitaires/polices.test.ts, et le rendu Playwright de la planche de style).
+ * Resultat : Petrona, Literata et Faustina repondent a `tnum` ; Newsreader et
+ * Source Sans 3 ont des chiffres tabulaires par defaut ; Public Sans et Alegreya Sans
+ * repondent a `tnum`.
+ *
+ * Fraunces a ete ELIMINEE : `tnum` n'a aucun effet sur elle (largeurs mesurees
+ * identiques avec et sans, 361,8 px contre 287,0 px pour dix chiffres). Or
+ * docs/specs/web.md elimine d'office toute police sans chiffres tabulaires pour les
+ * prix, et les prix sont le heros de ce site.
+ *
+ * `font-display: swap` partout : le texte s'affiche immediatement dans la police de
+ * repli puis bascule. Jamais de texte invisible pendant le chargement.
+ */
+
+/* Le sous-ensemble latin de Fontsource, identique pour toutes les variables. */
+@font-face {
+  font-family: 'Petrona';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/polices/petrona-latin-wght-normal.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/polices/public-sans-latin-wght-normal.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/polices/newsreader-latin-wght-normal.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Source Sans 3';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('/polices/source-sans-3-latin-wght-normal.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('/polices/literata-latin-wght-normal.woff2') format('woff2-variations');
+}
+
+@font-face {
+  font-family: 'Alegreya Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/polices/alegreya-sans-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Alegreya Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/polices/alegreya-sans-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Alegreya Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/polices/alegreya-sans-latin-700-normal.woff2') format('woff2');
+}
+
+/* Mono : uniquement le ticket de caisse et les identifiants de station. */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/polices/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+}

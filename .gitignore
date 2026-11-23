@@ -1,0 +1,46 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# donnees brutes et dumps : jamais commites
+data/raw/
+*.dump
+*.sql.gz
+*.zip
+*.parquet
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+
+# node / nuxt
+node_modules/
+web/.nuxt/
+web/.output/
+web/.data/
+web/dist/
+.pnpm-store/
+
+# playwright
+test-results/
+playwright-report/
+blob-report/
+web/tests/**/*-snapshots/
+
+# outils
+.DS_Store
+*.log
+.idea/
+.vscode/
+
+# certificats d'autorite locaux (voir infra/docker/ca/README.md)
+infra/docker/ca/*.crt

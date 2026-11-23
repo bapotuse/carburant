@@ -1,0 +1,6 @@
+.nuxt/
+.output/
+node_modules/
+openapi.json
+app/api/genere/
+pnpm-lock.yaml

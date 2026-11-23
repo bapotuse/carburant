@@ -1,0 +1,13 @@
+# Configuration gitleaks. On part de la base de regles fournie et on y ajoute
+# quelques chemins de ce projet qui contiennent des valeurs d'exemple.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valeurs d'exemple et donnees publiques"
+paths = [
+  '''^\.env\.example$''',
+  '''^docs/''',
+  '''^web/pnpm-lock\.yaml$''',
+  '''^uv\.lock$''',
+]

@@ -1,0 +1,140 @@
+# Projet nomme : le VPS heberge aussi d'autres projets de Baptiste. Conteneurs,
+# reseaux et volumes sont donc tous prefixes `carburant_`.
+name: carburant
+
+services:
+  db:
+    # amd64 uniquement : postgis/postgis ne publie pas d'image arm64 (verifie le
+    # 23/11/2026, y compris sur les tags du jour). Sur un VPS aarch64, la production
+    # utilise imresamu/postgis:18-3.6-alpine -- voir docs/decisions.md.
+    image: postgis/postgis:18-3.7
+    container_name: carburant_db
+    # Jamais de `ports:` ici : la base n'est joignable que depuis le reseau Docker.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-carburant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant, voir .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-carburant}
+      # Les agregats par jour sont calcules en heure de Paris : la session l'est aussi.
+      PGTZ: Europe/Paris
+    volumes:
+      # PostgreSQL 18+ : le volume se monte sur /var/lib/postgresql, PAS sur
+      # /var/lib/postgresql/data. L'image place alors les donnees dans un
+      # sous-repertoire, ce qui permet un `pg_upgrade --link` ulterieur sans buter
+      # sur une frontiere de point de montage. Monter /data directement fait echouer
+      # le demarrage avec un avertissement explicite -- constate le 23/11/2026.
+      - donnees_db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-carburant} -d ${POSTGRES_DB:-carburant}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    networks: [interne]
+
+  etl:
+    # Nom d'image explicite : c'est celui que la CI publiera sur GHCR et que le VPS
+    # tirera (voir compose.prod.yaml).
+    image: carburant-etl:local
+    build:
+      context: .
+      dockerfile: infra/docker/etl.Dockerfile
+      # `default` en temps normal. `host` sert aux environnements de construction
+      # places derriere un proxy sortant, ou le conteneur de build doit joindre le
+      # proxy de la machine hote. Voir .env.example.
+      network: ${BUILD_NETWORK:-default}
+    container_name: carburant_etl
+    # Docker fournit l'init (reaper de zombies, propagation des signaux).
+    init: true
+    env_file: [.env]
+    volumes:
+      - donnees_brutes:/app/data/raw
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+    networks: [interne, sortie]
+    # Au Jalon 0, le conteneur etl n'a rien a planifier : il n'est donc pas demarre
+    # par `make up`. `make etl` le lance a la demande (`docker compose run` active le
+    # profil tout seul). Le profil disparaitra au Jalon 1, quand supercronic
+    # planifiera la collecte toutes les 15 minutes.
+    profiles: [planification]
+
+  api:
+    # Nom d'image explicite : c'est celui que la CI publiera sur GHCR et que le VPS
+    # tirera (voir compose.prod.yaml).
+    image: carburant-api:local
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      # `default` en temps normal. `host` sert aux environnements de construction
+      # places derriere un proxy sortant, ou le conteneur de build doit joindre le
+      # proxy de la machine hote. Voir .env.example.
+      network: ${BUILD_NETWORK:-default}
+    container_name: carburant_api
+    # Docker fournit l'init (reaper de zombies, propagation des signaux).
+    init: true
+    env_file: [.env]
+    ports: ["${API_PORT:-8000}:8000"]
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+    networks: [interne, sortie]
+
+  web:
+    # Nom d'image explicite : c'est celui que la CI publiera sur GHCR et que le VPS
+    # tirera (voir compose.prod.yaml).
+    image: carburant-web:local
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+      # `default` en temps normal. `host` sert aux environnements de construction
+      # places derriere un proxy sortant, ou le conteneur de build doit joindre le
+      # proxy de la machine hote. Voir .env.example.
+      network: ${BUILD_NETWORK:-default}
+    container_name: carburant_web
+    # Docker fournit l'init (reaper de zombies, propagation des signaux).
+    init: true
+    environment:
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-http://localhost:8000}
+    ports: ["${WEB_PORT:-3000}:3000"]
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+    networks: [interne]
+
+  mcp:
+    # Nom d'image explicite : c'est celui que la CI publiera sur GHCR et que le VPS
+    # tirera (voir compose.prod.yaml).
+    image: carburant-mcp:local
+    build:
+      context: .
+      dockerfile: infra/docker/mcp.Dockerfile
+      # `default` en temps normal. `host` sert aux environnements de construction
+      # places derriere un proxy sortant, ou le conteneur de build doit joindre le
+      # proxy de la machine hote. Voir .env.example.
+      network: ${BUILD_NETWORK:-default}
+    container_name: carburant_mcp
+    # Docker fournit l'init (reaper de zombies, propagation des signaux).
+    init: true
+    environment:
+      CARBURANT_API_BASE: ${CARBURANT_API_BASE:-http://api:8000/v1}
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+    # Pas de reseau `interne` : le serveur MCP n'a aucune raison de voir la base.
+    networks: [sortie]
+    # Le transport Streamable HTTP arrive au Jalon 4 : d'ici la, le conteneur n'a
+    # rien a servir et n'est pas demarre par `make up`.
+    profiles: [mcp]
+
+networks:
+  interne:
+    name: carburant_interne
+  sortie:
+    name: carburant_sortie
+
+volumes:
+  donnees_db:
+    name: carburant_donnees_db
+  donnees_brutes:
+    name: carburant_donnees_brutes

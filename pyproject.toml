@@ -1,0 +1,94 @@
+[project]
+name = "carburant"
+version = "0.1.0"
+description = "Prix des carburants en France : ETL, API, serveur MCP"
+requires-python = ">=3.14"
+
+[tool.uv.workspace]
+members = ["etl", "api", "mcp"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.17.6",
+    "respx>=0.23.1",
+    "hypothesis>=6.170.0",
+    # Uniquement pour compresser les captures Playwright en WebP : une serie de
+    # captures pleine page en PNG a 2x pese ~28 Mo, ce qui n'a rien a faire dans un
+    # depot. Voir infra/scripts/compresser_captures.py.
+    "pillow>=12.0.0",
+    "pre-commit>=4.4.0",
+]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+extend-exclude = ["web", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "A",         # builtins shadowing
+    "C4",        # comprehensions
+    "DTZ",       # datetimes naifs interdits : central pour ce projet
+    "T20",       # pas de print oublie
+    "SIM",       # simplifications
+    "PTH",       # pathlib
+    "RUF",
+]
+ignore = [
+    "E501",
+    # N818 exige le suffixe `Error` sur les exceptions. Les identifiants metier de ce
+    # projet sont en francais (CLAUDE.md, section Conventions) : `CarburantInconnu` et
+    # `HorodatageIllisible` suivent cette convention. Le reste de la famille N reste
+    # actif, y compris sur les classes et les modules.
+    "N818",
+]
+
+# L'espace fine insecable U+202F est le separateur typographique francais entre un
+# nombre et son unite (`1,879 €/L`). RUF001/RUF002 la signalent comme un caractere
+# ambigu : c'est ici un choix delibere et teste (mcp/tests/test_formats.py).
+allowed-confusables = ["\u202f"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/tests/*" = ["T20"]
+# Les scripts de infra/scripts/ sont des outils en ligne de commande : ecrire sur la
+# sortie standard est leur raison d'etre.
+"infra/scripts/*" = ["T20"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_unreachable = true
+warn_return_any = true
+disallow_any_generics = true
+no_implicit_reexport = true
+show_error_codes = true
+pretty = true
+exclude = ["^web/", "^\\.venv/"]
+
+[[tool.mypy.overrides]]
+module = ["supercronic.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["etl/tests", "api/tests", "mcp/tests"]
+addopts = "-q --strict-markers --strict-config --import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: necessite une base PostGIS joignable",
+]

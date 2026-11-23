@@ -1,0 +1,29 @@
+[project]
+name = "prix-carburant-mcp"
+version = "0.1.0"
+description = "Serveur MCP : prix des carburants en France, par lieu, autonomie ou departement"
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+keywords = ["mcp", "carburant", "essence", "gazole", "france", "prix"]
+dependencies = [
+    "mcp>=2.3.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.14.4",
+]
+
+[project.scripts]
+prix-carburant-mcp = "carburant_mcp.serveur:main"
+
+[project.urls]
+Homepage = "https://github.com/bapotuse/carburant"
+Repository = "https://github.com/bapotuse/carburant"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Layout src/ : le dossier mcp/ ne doit jamais etre importable lui-meme, sinon il
+# masquerait le SDK `mcp`. Pas de __init__.py a la racine de mcp/.
+[tool.hatch.build.targets.wheel]
+packages = ["src/carburant_mcp"]

@@ -1,0 +1,176 @@
+/* Feuille de base. CSS natif : custom properties, @layer, container queries.
+ * Aucune librairie de composants, aucun framework utilitaire : chaque composant de
+ * ce site est dessine pour ce site (docs/specs/web.md).
+ */
+
+@layer reset, base, composants, utilitaires;
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  * {
+    margin: 0;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  img,
+  picture,
+  svg,
+  video {
+    display: block;
+    max-width: 100%;
+  }
+
+  /* Police >= 16px dans les champs : en dessous, iOS zoome tout seul au focus. */
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+    font-size: max(1rem, var(--t-m));
+    color: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  /* Cibles tactiles : 44px minimum partout, verifie par Playwright. */
+  button,
+  a[href],
+  input,
+  select,
+  summary,
+  [role='button'],
+  [role='slider'] {
+    min-height: var(--cible-min);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+    font-weight: 600;
+    line-height: var(--interligne-titre);
+  }
+
+  p,
+  li {
+    text-wrap: pretty;
+  }
+
+  /* Aucune animation si l'utilisateur n'en veut pas. Sans exception. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer base {
+  body {
+    /* Fond explicite : sans quoi le navigateur applique le sien en mode sombre. */
+    background: var(--fond);
+    color: var(--encre);
+    font-family: var(--police-texte);
+    font-size: var(--t-m);
+    line-height: var(--interligne-texte);
+    padding-inline: var(--gouttiere);
+    padding-block-end: env(safe-area-inset-bottom);
+  }
+
+  h1 {
+    font-family: var(--police-titre);
+    font-size: var(--t-2xl);
+  }
+
+  h2 {
+    font-family: var(--police-titre);
+    font-size: var(--t-xl);
+  }
+
+  h3 {
+    font-family: var(--police-titre);
+    font-size: var(--t-l);
+  }
+
+  p {
+    max-width: var(--mesure);
+  }
+
+  a {
+    color: var(--terracotta-texte);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+
+  /* Focus visible et dessine, sur tout element focusable. Jamais outline: none. */
+  :focus-visible {
+    outline: 2px solid var(--terracotta-texte);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Grain de papier : un SVG de bruit, pas une image bitmap. 3 % d'opacite. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23g)'/%3E%3C/svg%3E");
+  }
+}
+
+@layer composants {
+  /* Lien d'evitement : premier element focusable de chaque page. */
+  .evitement {
+    position: absolute;
+    inset-inline-start: -9999px;
+  }
+
+  .evitement:focus {
+    position: static;
+    display: inline-block;
+    padding: var(--e-2) var(--e-3);
+    background: var(--surface);
+  }
+
+  /* Separateur : un marquage au sol, pas un filet gris. */
+  .marquage {
+    border: 0;
+    block-size: 4px;
+    background: repeating-linear-gradient(to right, var(--ligne) 0 18px, transparent 18px 32px);
+  }
+}
+
+@layer utilitaires {
+  .lecteur-seul {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

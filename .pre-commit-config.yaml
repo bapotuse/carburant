@@ -1,0 +1,66 @@
+# Memes verifications que `make check`, mais seulement sur les fichiers modifies.
+# Installation : uv run pre-commit install
+#
+# Jamais de `--no-verify` : si un hook echoue, on corrige la cause.
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=600']
+        # Les captures compressees peuvent depasser : elles sont deja verifiees par
+        # le script de compression.
+        exclude: '^docs/captures/'
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+        exclude: '^web/openapi\.json$'
+      - id: end-of-file-fixer
+        exclude: '\.(webp|png|woff2)$'
+      - id: trailing-whitespace
+        exclude: '\.(webp|png|woff2)$'
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # Aucun secret dans le depot : .env est ignore par git, mais une cle peut se
+  # glisser ailleurs.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy --strict
+        entry: uv run mypy --strict
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: [etl, api, mcp]
+
+      # Les chemins arrivent depuis la racine du depot (`web/app/...`) alors que ces
+      # outils tournent depuis `web/` : on retire le prefixe avec `${@#web/}`.
+      - id: eslint
+        name: eslint
+        entry: bash -c 'cd web && pnpm exec eslint --fix "${@#web/}"' --
+        language: system
+        files: '^web/.*\.(ts|mts|js|mjs|vue)$'
+        exclude: '^web/(node_modules|\.nuxt|\.output)/'
+
+      - id: prettier
+        name: prettier
+        entry: bash -c 'cd web && pnpm exec prettier --write "${@#web/}"' --
+        language: system
+        files: '^web/.*\.(ts|mts|js|mjs|vue|css|json|md|yaml|yml)$'
+        exclude: '^web/(node_modules|\.nuxt|\.output)/|^web/openapi\.json$'

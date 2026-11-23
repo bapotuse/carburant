@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Les versions sont decidees dans docs/decisions.md et verifiees ici.
+  PYTHON_VERSION: '3.14'
+  NODE_VERSION: '26'
+
+jobs:
+  python:
+    name: Python — lint, typage, tests
+    runs-on: ubuntu-latest
+    services:
+      db:
+        # Les tests d'integration ont besoin d'un vrai PostGIS : une base simulee
+        # ne dirait rien de ST_DWithin ni du partitionnement.
+        image: postgis/postgis:18-3.7
+        env:
+          POSTGRES_USER: carburant
+          POSTGRES_PASSWORD: carburant-ci
+          POSTGRES_DB: carburant
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U carburant -d carburant"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://carburant:carburant-ci@localhost:5432/carburant
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Installer Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Synchroniser le workspace
+        run: uv sync --all-packages --frozen
+
+      - name: Verifier la version de Python
+        run: |
+          uv run python -c "import sys; assert sys.version_info[:2] == (3, 14), sys.version"
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Formatage
+        run: uv run ruff format --check .
+
+      - name: Typage strict
+        run: uv run mypy --strict etl api mcp
+
+      - name: Tests
+        run: uv run pytest
+
+  front:
+    name: Front — lint, typage, tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Installer les dependances
+        run: pnpm install --frozen-lockfile
+
+      - name: Verifier qu'aucune librairie de composants n'est entree dans l'arbre
+        # docs/specs/web.md les interdit : c'est la premiere source de l'air
+        # « genere ». On le verifie a chaque execution, pas seulement a la revue.
+        run: |
+          set -eu
+          interdits='@nuxt/ui|vuetify|primevue|shadcn-vue|tailwindcss|element-plus|quasar'
+          if pnpm ls --depth Infinity --json \
+             | grep -oE "\"($interdits)\"" | sort -u | grep . ; then
+            echo "::error::Une librairie de composants interdite est presente."
+            exit 1
+          fi
+          echo "Aucune librairie de composants interdite."
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Formatage
+        run: pnpm format:check
+
+      - name: Typage
+        run: pnpm typecheck
+
+      - name: Tests unitaires
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Budget JS de l'accueil
+        # docs/specs/web.md : <= ~100 Ko gzip hors carte et 3D.
+        run: |
+          set -eu
+          total=0
+          for f in $(find .output/public/_nuxt -name '*.js'); do
+            total=$((total + $(gzip -c "$f" | wc -c)))
+          done
+          ko=$((total / 1024))
+          echo "JS client total : ${ko} Ko gzip"
+          if [ "$ko" -gt 140 ]; then
+            echo "::error::Budget JS depasse : ${ko} Ko gzip (plafond 140 toutes pages)."
+            exit 1
+          fi
+
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --all-packages --frozen
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: cd web && pnpm install --frozen-lockfile
+      - run: uv run pre-commit run --all-files --show-diff-on-failure

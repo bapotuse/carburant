@@ -1,16 +1,27 @@
 # Avancement
 
 ## Prochaine action
-**J0-1** : créer l'arborescence du monorepo et le workspace uv (voir le détail du Jalon 0 ci-dessous).
-Le cadrage est terminé ; les tâches J0-1 à J0-14 ne dépendent pas des réponses de Baptiste et
-s'enchaînent. Seule **J0-15 (planche de style)** s'arrête sur une validation.
+**J0-14** : pousser `main` sur `bapotuse/carburant` et voir la CI passer au vert.
+Bloqué par l'action 1 de Baptiste (`gh auth login` ou création manuelle du dépôt).
+
+Tout le reste du Jalon 0 est fait et vérifié. Dès le dépôt créé : J0-14, puis
+**[VALIDATION] J0-15** — la planche de style attend le choix de Baptiste, les captures
+sont dans `docs/captures/J0/`.
 
 ## En attente de Baptiste
-- **Bilan de cadrage du 23/11/2026** : 7 thèmes de questions (données, design, 3D, mobile,
-  hébergement, MCP, nommage) + guide des actions sur ses comptes. Si Baptiste répond « ok », les
-  recommandations par défaut s'appliquent et le travail continue sans autre attente.
-- Bloquant pour le **Jalon 1** uniquement : IP et utilisateur du VPS, nom de domaine.
-  Rien ne bloque le Jalon 0.
+Le cadrage est répondu (« ok » du 23/11/2026 : les 15 recommandations par défaut s'appliquent, voir
+`docs/decisions.md`). Restent les **actions sur ses comptes** :
+
+| Action | Débloque | Statut |
+|---|---|---|
+| 1 — `gh auth login` (ou création manuelle du dépôt `bapotuse/carburant`) | J0-12, J0-14 : dépôt distant et CI | **en attente** |
+| 2 — ports 80/443 dans la *security list* du VCN Oracle | Jalon 1 : mise en ligne | en attente |
+| 3 — IP publique + utilisateur du VPS (`ubuntu` ou `opc`) | Jalon 1 : déploiement, choix de l'image PostGIS | en attente |
+| 4 — nom de domaine en `.fr` + 2 enregistrements `A` | Jalon 1 : HTTPS, donc géolocalisation testable | en attente |
+| 5 — compte healthchecks.io | Jalon 6 : alertes | en attente |
+| 6 — compte PyPI + 2FA | Jalon 4 : `uvx prix-carburant-mcp` | en attente |
+
+**Rien de tout cela ne bloque J0-1 à J0-11 ni J0-15**, qui s'enchaînent sans lui.
 
 ## Jalons
 Chaque jalon se termine par : critère de sortie vérifié, bilan à Baptiste, mise à jour de comprendre-le-projet.md.
@@ -20,23 +31,26 @@ Chaque jalon se termine par : critère de sortie vérifié, bilan à Baptiste, m
 Dans l'ordre. Chaque tâche a sa commande de vérification ; une tâche n'est cochée que si la
 commande a été lancée et son résultat observé (`CLAUDE.md` § « Terminé = observé »).
 
+Légende : ✅ fait et vérifié · ⏳ écrit, en attente d'une action de Baptiste ·
+🎨 en attente de validation de goût.
+
 | # | Tâche | Commande de vérification |
 |---|---|---|
-| J0-1 | Arborescence `etl/ api/ web/ mcp/ infra/ docs/ data/`, `.gitignore` (dont `.env`, `data/raw/`, `node_modules/`, `.venv/`), `.env.example` | `test -d etl -a -d api -a -d web -a -d mcp -a -d infra && git check-ignore -v .env` |
-| J0-2 | Workspace uv : `pyproject.toml` racine avec `[tool.uv.workspace]`, membres `etl`, `api`, `mcp` ; `requires-python = ">=3.14"` | `uv sync && uv run python -c "import sys; assert sys.version_info[:2]==(3,14), sys.version"` |
-| J0-3 | `web/` en pnpm : Nuxt 4.6.4, Vue 3, TypeScript strict, **sans** librairie de composants ni Tailwind | `cd web && pnpm install && pnpm build && grep -c '"@nuxt/ui"\|tailwind' package.json` → 0 |
-| J0-4 | Docker Compose : `db` (PostGIS), `etl`, `api`, `web`. Healthcheck par service, utilisateurs non-root, `db` non exposée hors du réseau Docker, noms de projet/réseaux/volumes **préfixés `carburant_`** | `docker compose config --quiet && docker compose ps --format '{{.Service}} {{.Health}}'` → tous `healthy` |
-| J0-5 | Migration 001 : schémas `raw`, `staging`, `marts`, `meta` + `CREATE EXTENSION postgis`. Outil de migration : choix noté dans `decisions.md` | `make migrate && docker compose exec -T db psql -U carburant -tAc "select string_agg(nspname,',' order by nspname) from pg_namespace where nspname in ('raw','staging','marts','meta')"` → `marts,meta,raw,staging` |
-| J0-6 | Makefile : `up`, `down`, `etl`, `test`, `check`, `captures`, `deploy`, `migrate`, `logs` | `make -n up down etl test check captures deploy migrate logs` (aucune cible manquante) |
-| J0-7 | Lint / format / typage Python : ruff (lint + format), mypy **strict** | `uv run ruff check . && uv run ruff format --check . && uv run mypy --strict etl api mcp` |
-| J0-8 | Lint / format / typage front : eslint 10, prettier, `vue-tsc --noEmit` | `cd web && pnpm lint && pnpm format:check && pnpm typecheck` |
-| J0-9 | `pre-commit` pour les deux côtés (ruff, mypy, eslint, prettier, détection de secrets) | `pre-commit run --all-files` |
-| J0-10 | Un test par brique, qui échoue si la brique est cassée : helper de format français (`1,879 €`, `23 nov.`, espaces insécables) côté Python, un test Vitest, un test Playwright de démarrage | `make test` |
-| J0-11 | `make check` = lint + format + typage + tests, des deux côtés, en une commande | `make check` → sortie 0 |
-| J0-12 | CI GitHub Actions : lint, typage, tests Python avec un service PostGIS, tests front, sur push et PR | `gh run list --limit 1` → `success` (après J0-14) |
-| J0-13 | README squelette : schéma d'architecture Mermaid, lancement en une commande, liens | `grep -q '```mermaid' README.md && grep -q 'make up' README.md` |
-| J0-14 | Dépôt distant `bapotuse/carburant` créé, `main` poussée, CI verte | `git push -u origin main && gh run watch` |
-| J0-15 | **[VALIDATION]** Planche de style : page statique rendant 2 ou 3 paires typographiques × palette claire et sombre × prix façon totem × jauge × ticket de caisse. Valeurs d'exemple **étiquetées comme telles**. Un test automatisé vérifie le contraste de chaque paire de tokens réellement utilisée | `make captures` puis ouverture des captures de `docs/captures/J0/` (iPhone SE 375×667, Pixel 7, bureau 1440×900, thèmes clair et sombre) et comparaison à `docs/anti-patterns-ia.md` |
+| J0-1 ✅ | Arborescence `etl/ api/ web/ mcp/ infra/ docs/ data/`, `.gitignore` (dont `.env`, `data/raw/`, `node_modules/`, `.venv/`), `.env.example` | `test -d etl -a -d api -a -d web -a -d mcp -a -d infra && git check-ignore -v .env` |
+| J0-2 ✅ | Workspace uv : `pyproject.toml` racine avec `[tool.uv.workspace]`, membres `etl`, `api`, `mcp` ; `requires-python = ">=3.14"` | `uv sync && uv run python -c "import sys; assert sys.version_info[:2]==(3,14), sys.version"` |
+| J0-3 ✅ | `web/` en pnpm : Nuxt 4.6.4, Vue 3, TypeScript strict, **sans** librairie de composants ni Tailwind | `cd web && pnpm install && pnpm build && grep -c '"@nuxt/ui"\|tailwind' package.json` → 0 |
+| J0-4 ✅ | Docker Compose : `db` (PostGIS), `etl`, `api`, `web`. Healthcheck par service, utilisateurs non-root, `db` non exposée hors du réseau Docker, noms de projet/réseaux/volumes **préfixés `carburant_`** | `docker compose config --quiet && docker compose ps --format '{{.Service}} {{.Health}}'` → tous `healthy` |
+| J0-5 ✅ | Migration 001 : schémas `raw`, `staging`, `marts`, `meta` + `CREATE EXTENSION postgis`. Outil de migration : choix noté dans `decisions.md` | `make migrate && docker compose exec -T db psql -U carburant -tAc "select string_agg(nspname,',' order by nspname) from pg_namespace where nspname in ('raw','staging','marts','meta')"` → `marts,meta,raw,staging` |
+| J0-6 ✅ | Makefile : `up`, `down`, `etl`, `test`, `check`, `captures`, `deploy`, `migrate`, `logs` | `make -n up down etl test check captures deploy migrate logs` (aucune cible manquante) |
+| J0-7 ✅ | Lint / format / typage Python : ruff (lint + format), mypy **strict** | `uv run ruff check . && uv run ruff format --check . && uv run mypy --strict etl api mcp` |
+| J0-8 ✅ | Lint / format / typage front : eslint 10, prettier, `vue-tsc --noEmit` | `cd web && pnpm lint && pnpm format:check && pnpm typecheck` |
+| J0-9 ✅ | `pre-commit` pour les deux côtés (ruff, mypy, eslint, prettier, détection de secrets) | `pre-commit run --all-files` |
+| J0-10 ✅ | Un test par brique, qui échoue si la brique est cassée : helper de format français (`1,879 €`, `23 nov.`, espaces insécables) côté Python, un test Vitest, un test Playwright de démarrage | `make test` |
+| J0-11 ✅ | `make check` = lint + format + typage + tests, des deux côtés, en une commande | `make check` → sortie 0 |
+| J0-12 ⏳ | CI GitHub Actions : lint, typage, tests Python avec un service PostGIS, tests front, sur push et PR | `gh run list --limit 1` → `success` (après J0-14) |
+| J0-13 ✅ | README squelette : schéma d'architecture Mermaid, lancement en une commande, liens | `grep -q '```mermaid' README.md && grep -q 'make up' README.md` |
+| J0-14 ⏳ | Dépôt distant `bapotuse/carburant` créé, `main` poussée, CI verte | `git push -u origin main && gh run watch` |
+| J0-15 🎨 | **[VALIDATION]** Planche de style : page statique rendant 2 ou 3 paires typographiques × palette claire et sombre × prix façon totem × jauge × ticket de caisse. Valeurs d'exemple **étiquetées comme telles**. Un test automatisé vérifie le contraste de chaque paire de tokens réellement utilisée | `make captures` puis ouverture des captures de `docs/captures/J0/` (iPhone SE 375×667, Pixel 7, bureau 1440×900, thèmes clair et sombre) et comparaison à `docs/anti-patterns-ia.md` |
 
 Notes d'exécution :
 
@@ -51,6 +65,19 @@ Notes d'exécution :
 
 Sortie : `make up && make check` vert sur une machine propre ; CI verte sur GitHub ; captures de la
 planche de style produites et relues.
+
+**Constaté le 23/11/2026 :**
+
+- `make up` → `db`, `api`, `web` sains ; migration 001 appliquee ; `/v1/sante` repond
+  **200** base allumee, **503** base eteinte (verifie en l'arretant), `/docs` repond 200,
+  le site rend « Où faire le plein ? ».
+- `make check` → lint, formatage, typage strict et **221 tests** (112 Python + 109 front)
+  au vert.
+- `make captures` → 30 captures sur 3 appareils × 2 themes, compressees de 28,4 Mo a
+  6,1 Mo, dans `docs/captures/J0/`, relues contre `docs/anti-patterns-ia.md`.
+- `pre-commit run --all-files` → 14 hooks au vert.
+- **Non verifie** : la CI sur GitHub (le depot distant n'existe pas encore) et le
+  comportement reel sur iOS (voir `docs/a-verifier.md`, lignes 15 et 18).
 
 ### J1 — Tranche verticale en ligne
 - [ ] ETL minimal : extract (export du flux v2) → raw → staging → `dim_station` + `fact_prix` (grain = changement de prix, idempotent)
@@ -109,6 +136,28 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-23 — Jalon 0, socle.** Monorepo complet : workspace uv (Python 3.14,
+  3 paquets), front Nuxt 4.6.4 en pnpm (Node 26), Docker Compose a 5 services avec
+  healthchecks et volumes prefixes, migration 001 (schemas raw/staging/marts/meta +
+  PostGIS + `meta.execution_etl`), Makefile, ruff + mypy strict, eslint + prettier +
+  vue-tsc, pre-commit (14 hooks dont gitleaks), CI GitHub Actions a 3 jobs, README avec
+  schema Mermaid, `docs/comprendre-le-projet.md`.
+  Code reel ecrit, teste : normalisation des carburants, lecture des horodatages avec
+  le piege du fuseau, classement de fraicheur, detection d'aberrants avec plancher de
+  MAD, formateurs francais (Python et `Intl`), `/v1/sante` qui interroge vraiment la
+  base, composants PrixTotem / PastilleCarburant / JaugeAutonomie / TicketPlein, et la
+  planche de style.
+  **Verifie** : `make up` (db/api/web sains, migration appliquee, 200 puis 503 en
+  coupant la base, puis 200 au redemarrage), `make check` (221 tests), `make captures`
+  (30 captures, 3 appareils × 2 themes, compressees de 28,4 a 6,1 Mo), `pre-commit
+  --all-files`. JS client mesure : **77,7 Ko gzip** pour tout le site, budget 100 Ko.
+  **Corrections nees de tests qui ont echoue** : `--fraicheur-perime` etait a 3,4:1 au
+  lieu de 4,5:1 ; `role="text"` n'existe pas en ARIA ; Fraunces n'a pas de chiffres
+  tabulaires et est eliminee ; TypeScript 7 casse `typescript-eslint` ; PostgreSQL 18+
+  a change de point de montage ; `corepack` a disparu de Node 26.
+  **Non fait** : push et CI (en attente du depot distant), validation de la planche de
+  style (en attente de Baptiste).
 
 - **2026-11-23 — Session de cadrage.** Spécification persistée en 8 fichiers et commitée (`docs:
   spécification initiale`). Reconnaissance par vraies requêtes sur les 4 sources : flux v2

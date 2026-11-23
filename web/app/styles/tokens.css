@@ -1,0 +1,176 @@
+/* Tokens de couleur, d'espace et de typographie.
+ *
+ * Tous les contrastes de ce fichier ont ete MESURES, pas estimes : le script de
+ * derivation est dans le depot et un test automatise les reverifie a chaque
+ * `make check` (tests/unitaires/contrastes.test.ts). Les valeurs en commentaire sont
+ * le contraste WCAG 2.1 sur --fond puis sur --surface.
+ *
+ * Regle : aucune couleur n'est inventee. Les variantes « -texte » sont derivees des
+ * couleurs d'accent de docs/specs/web.md parce que celles-ci echouent au niveau AA
+ * pour le texte courant (terracotta 4,03:1, olive 4,25:1).
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ---------------------------------------------------- neutres (chauds) */
+  --fond: #f6f1e8;
+  --surface: #ece3d3;
+  --encre: #2a2420; /* 13,61 / 12,03 */
+  --encre-2: #6b6158; /*  5,37 /  4,75 */
+
+  /* Decoratif uniquement : 1,33:1. Ne jamais l'utiliser pour une bordure de
+   * controle, qui doit atteindre 3:1 (WCAG 1.4.11). */
+  --ligne: #ddd2bf; /*  1,33 /  1,17 */
+  --bordure: #878075; /*  3,47 /  3,07 -- bordures de champ et de controle */
+
+  /* ---------------------------------------------------- accents */
+  --terracotta: #b85c38; /*  4,03 /  3,57 -- aplats, grands textes, graphismes */
+  --terracotta-texte: #9e4f30; /*  5,16 /  4,56 -- liens et petits textes */
+  --olive: #6e7748; /*  4,25 /  3,75 */
+  --olive-texte: #626a40; /*  5,11 /  4,51 */
+  --ardoise: #4a5d6e; /*  6,06 /  5,35 -- donnees, liens */
+
+  /* ---------------------------------------------------- carburants
+   * Teintes inspirees des pistolets en station, reaccordees a la palette.
+   * Leur luminance est VOLONTAIREMENT etalee (4,6:1 a 9,5:1) pour que les six
+   * pastilles restent distinctes en niveaux de gris et en simulation de daltonisme.
+   * La couleur n'est jamais seule porteuse de sens : la forme EN 16942 (cercle pour
+   * les essences, carre pour le gazole, losange pour le GPL) et le libelle
+   * l'accompagnent toujours. */
+  --carburant-gazole: #4e5d29; /*  6,39 /  5,65  carre   */
+  --carburant-sp95: #14472f; /*  9,47 /  8,36  cercle  */
+  --carburant-e10: #116b6e; /*  5,57 /  4,92  cercle  */
+  --carburant-sp98: #65426e; /*  7,30 /  6,45  cercle  */
+  --carburant-e85: #2e6c8c; /*  5,13 /  4,53  cercle  */
+  --carburant-gplc: #5e4013; /*  8,41 /  7,43  losange */
+
+  /* ---------------------------------------------------- fraicheur
+   * Quatre classes, cf. docs/specs/donnees.md. Toutes atteignent AA sur fond ET sur
+   * surface : ce sont des couleurs de TEXTE, pas de decor -- un test le verifie.
+   * `recent` (5,37:1) et `perime` (5,13:1) sont volontairement proches : la couleur
+   * ne distingue pas ces deux classes. Ce sont le libelle et la date de mise a jour,
+   * toujours ecrits en clair a cote, qui portent la difference. */
+  --fraicheur-frais: #626a40; /*  5,11 /  4,51 */
+  --fraicheur-recent: #6b6158; /*  5,37 /  4,75 */
+  --fraicheur-ancien: #9e4f30; /*  5,16 /  4,56 */
+  --fraicheur-perime: #6b655c; /*  5,13 /  4,53 */
+
+  /* ---------------------------------------------------- typographie */
+  --police-titre: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --police-texte: 'Public Sans', 'Helvetica Neue', system-ui, sans-serif;
+  --police-prix: 'Fraunces', Georgia, serif;
+  --police-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Echelle nette, avec des sauts francs. Les prix sont hors echelle. */
+  --t-xs: 0.8125rem; /* 13px -- mentions, dates */
+  --t-s: 0.9375rem; /* 15px */
+  --t-m: 1.0625rem; /* 17px -- texte courant */
+  --t-l: 1.375rem; /* 22px */
+  --t-xl: 1.875rem; /* 30px */
+  --t-2xl: 2.5rem; /* 40px -- titres de page */
+  --t-prix: 3.25rem; /* 52px -- le prix est le heros */
+  --t-prix-l: 4.5rem; /* 72px -- fiche station */
+
+  --interligne-texte: 1.6;
+  --interligne-titre: 1.15;
+  --interligne-prix: 1;
+  --mesure: 65ch; /* ~65 caracteres par ligne */
+
+  /* ---------------------------------------------------- espace
+   * Pas francs, pas une progression molle. */
+  --e-1: 0.25rem;
+  --e-2: 0.5rem;
+  --e-3: 0.75rem;
+  --e-4: 1rem;
+  --e-6: 1.5rem;
+  --e-8: 2rem;
+  --e-12: 3rem;
+  --e-16: 4rem;
+  --e-24: 6rem;
+  --gouttiere: 1rem; /* bord d'ecran sur mobile */
+
+  /* ---------------------------------------------------- formes
+   * Rayons differencies par fonction, pas un rayon unique partout. */
+  --rayon-champ: 0.25rem;
+  --rayon-bouton: 0.1875rem;
+  --rayon-pastille: 999px;
+  --rayon-feuille: 1rem 1rem 0 0; /* bottom sheet */
+
+  /* Une seule ombre dans tout le site, et elle est douce. */
+  --ombre-feuille: 0 -2px 16px rgb(42 36 32 / 12%);
+
+  /* ---------------------------------------------------- cibles tactiles */
+  --cible-min: 44px;
+
+  /* ---------------------------------------------------- mouvement */
+  --duree-courte: 140ms;
+  --duree-moyenne: 320ms;
+  --courbe: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* Palette sombre : brun profond, jamais #000, jamais #fff.
+ * Memes regles de contraste, toutes mesurees.
+ * Les six couleurs de carburant y sont quasi iso-luminantes : le plancher de 4,5:1
+ * sur un fond sombre ne laisse pas de marge pour les etaler. En thème sombre, c'est
+ * donc entierement la forme et le libelle qui distinguent les carburants. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --fond: #1c1714;
+    --surface: #26201b;
+    --encre: #f2eadf; /* 14,90 / 13,50 */
+    --encre-2: #aca69e; /*  7,36 /  6,67 */
+    --ligne: #3a322c;
+    --bordure: #726a64; /*  3,35 /  3,04 */
+
+    --terracotta: #c27354; /*  4,97 /  4,50 */
+    --terracotta-texte: #c27354;
+    --olive: #858d65; /*  5,07 /  4,59 */
+    --olive-texte: #858d65;
+    --ardoise: #7d8a97; /*  5,04 /  4,56 */
+
+    --carburant-gazole: #818c67; /*  4,97 /  4,51 */
+    --carburant-sp95: #708f80; /*  5,02 /  4,54 */
+    --carburant-e10: #519395; /*  5,04 /  4,57 */
+    --carburant-sp98: #98809e; /*  5,01 /  4,53 */
+    --carburant-e85: #5e8ea6; /*  4,99 /  4,52 */
+    --carburant-gplc: #988568; /*  4,98 /  4,51 */
+
+    --fraicheur-frais: #858d65; /*  5,07 /  4,59 */
+    --fraicheur-recent: #aca69e; /*  7,36 /  6,67 */
+    --fraicheur-ancien: #c27354; /*  4,97 /  4,50 */
+    --fraicheur-perime: #8e8883; /*  5,08 /  4,60 */
+
+    --ombre-feuille: 0 -2px 16px rgb(0 0 0 / 40%);
+  }
+}
+
+/* Theme sombre force, independamment du reglage du telephone. */
+:root[data-theme='dark'] {
+  --fond: #1c1714;
+  --surface: #26201b;
+  --encre: #f2eadf;
+  --encre-2: #aca69e;
+  --ligne: #3a322c;
+  --bordure: #726a64;
+
+  --terracotta: #c27354;
+  --terracotta-texte: #c27354;
+  --olive: #858d65;
+  --olive-texte: #858d65;
+  --ardoise: #7d8a97;
+
+  --carburant-gazole: #818c67;
+  --carburant-sp95: #708f80;
+  --carburant-e10: #519395;
+  --carburant-sp98: #98809e;
+  --carburant-e85: #5e8ea6;
+  --carburant-gplc: #988568;
+
+  --fraicheur-frais: #858d65;
+  --fraicheur-recent: #aca69e;
+  --fraicheur-ancien: #c27354;
+  --fraicheur-perime: #8e8883;
+
+  --ombre-feuille: 0 -2px 16px rgb(0 0 0 / 40%);
+}
