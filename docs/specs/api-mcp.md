@@ -7,7 +7,7 @@
 - Cache : durée alignée sur la collecte pour les prix, 24 h ou plus pour le géocodage, 1 h pour les tendances ; en-têtes `Cache-Control` et `ETag`.
 - Rate limiting par IP ; CORS limité aux origines du site.
 - `/v1/sante` : base joignable, âge de la dernière collecte réussie, 503 au-delà du seuil. `/v1/meta` : dernière collecte, nombre de stations, versions des sources.
-- Objectif : p95 < 300 ms sur le VPS pour `/stations/proches` (index GiST et `ST_DWithin` sur geography).
+- Objectif : p95 < 300 ms sur le VPS pour `/stations/proches` (index GiST et `ST_DWithin` sur geography). **[mesuré 23/11/2026]** La requête équivalente (`ST_DWithin` 10 km autour du Prado + dernier prix par station via `LATERAL`, 14 partitions mensuelles, 5,3 M de lignes) s'exécute en **13,7 ms** sur une machine à 4 vCPU. Marge d'un facteur 20 avant la cible.
 
 ### Endpoints (noms indicatifs)
 - `GET /v1/stations/proches?lat&lon&rayon_km&carburant&tri=prix|distance|cout_reel`
@@ -15,7 +15,7 @@
 - `GET /v1/stations/{id}` et `GET /v1/stations/{id}/historique?carburant&depuis`
 - `GET /v1/tendances?departement&carburant&periode`
 - `GET /v1/empreinte?carburant&litres` et `GET /v1/empreinte/comparaison?litres`
-- `GET /v1/geocode?q=` : proxy Géoplateforme avec cache, limité à la France, renvoie plusieurs candidats avec leur score
+- `GET /v1/geocode?q=` : proxy Géoplateforme avec cache, limité à la France, renvoie plusieurs candidats avec leur score. **[vérifié 23/11/2026]** `https://data.geopf.fr/geocodage/search` (GeoJSON, sans clé) et `.../geocodage/completion` pour l'autocomplétion. En-têtes de débit renvoyés : `ratelimit-limit: 50` et `x-ratelimit-limit-second: 1`. CORS ouvert (`access-control-allow-origin: *`), mais on garde le proxy : le quota est partagé, et le cache (24 h) le protège.
 - `GET /v1/anecdotes/du-jour`
 
 ## Logique « meilleure station » (cœur du projet)
@@ -33,7 +33,7 @@ Tests : fonction de coût pure (tests unitaires) ; propriétés avec hypothesis 
 ## Serveur MCP
 - Le dossier `mcp/` ne doit jamais être lui-même importable (layout `src/`, pas de `__init__.py` à sa racine, nom d'import du type `carburant_mcp`) : sinon il masquerait le SDK `mcp`.
 - Package Python dans `mcp/`, installable avec `uvx` : depuis PyPI si Baptiste crée un compte, sinon `uvx --from "git+https://github.com/<compte>/<depot>#subdirectory=mcp" <nom>`. Nom à proposer : court, explicite, libre sur PyPI (vérifie).
-- SDK officiel `mcp`, ligne 2.x : stable depuis fin juillet 2026, il suit la spécification MCP du 2026-07-28, et la classe serveur de haut niveau a été renommée par rapport à FastMCP v1. Lis la documentation et le guide de migration de la version installée ; n'écris pas de code v1 de mémoire.
+- SDK officiel `mcp`, **[vérifié 23/11/2026] version 2.3.0 (publiée le 02/10/2026)**, bien sur la ligne 2.x annoncée. Ses classifiers s'arrêtent à **Python 3.14**, ce qui fixe la version de Python du projet. La classe serveur de haut niveau a été renommée par rapport à FastMCP v1. Lis la documentation et le guide de migration de la version installée ; n'écris pas de code v1 de mémoire.
 - Le serveur appelle uniquement l'API publique (URL configurable par variable d'environnement, production par défaut), jamais la base : n'importe qui peut l'installer.
 - Deux transports :
   - stdio, pour l'installation locale ;
@@ -46,7 +46,9 @@ Tests : fonction de coût pure (tests unitaires) ; propriétés avec hypothesis 
   - `empreinte_carbone_plein(carburant: str, litres: float)`
   - `comparer_carburants(lieu: str)`
 - `carburant` accepte les synonymes courants (« diesel », « sans plomb 95 », « E10 », « super ») et les normalise ; une valeur inconnue renvoie une erreur qui liste les valeurs acceptées.
-- `lieu` est du texte libre géocodé via `/v1/geocode`. Si le résultat est ambigu (score faible ou plusieurs lieux plausibles : « le Prado » en est un exemple), renvoie les candidats au lieu de deviner.
+- `lieu` est du texte libre géocodé via `/v1/geocode`. **[corrigé 23/11/2026] Règle d'ambiguïté chiffrée**, dérivée des 4 requêtes de reconnaissance : renvoyer les candidats au lieu de choisir si **`score_1 < 0,80`** ou si **`score_1 − score_2 < 0,05`**.
+  Comportement obtenu sur les cas réels : « 40 avenue du Prado, 13006 Marseille » (0,972, écart 0,517) → réponse directe ; « 13008 » (0,865, écart 0,157) → réponse directe ; « le Prado, Marseille » (0,608) → demande de précision ; « Prado Marseille » (écart 0,009, cinq candidats en 0,025 point) → demande de précision.
+  L'avenue du Prado existe en **13006 et 13008**, à 1,2 km l'une de l'autre, avec des scores quasi identiques : il n'y a pas de bon candidat à deviner. Filtrer sur `type` (`housenumber`, `street`, `municipality`, `locality`) et déprioriser les `locality` commençant par `Tunnel`, qui polluent les résultats.
 - Réponses concises : sortie structurée (schéma) et texte court. Pour chaque station : adresse, ville, prix au format français, distance, date de mise à jour, avertissement si le prix date de plus de 24 h, lien vers la fiche sur le site, lien d'itinéraire. Tools annotés en lecture seule.
 - Erreurs exploitables par le modèle, par exemple « lieu introuvable : précise la ville ou le code postal ».
 - Tests : session client en mémoire du SDK avec API simulée (respx) ; smoke test avec MCP Inspector en mode CLI contre l'API locale ; un test de bout en bout contre la production après déploiement.
