@@ -24,8 +24,13 @@ aide: ## Liste les commandes disponibles
 # ----------------------------------------------------------------- cycle de vie
 up: ## Demarre la pile locale et applique les migrations
 	@test -f .env || { echo "Pas de .env : cp .env.example .env puis completer." >&2; exit 1; }
+	# La base d'abord, puis les migrations, puis le reste : sur une base vierge,
+	# `/v1/sante` interroge `meta.execution_etl`, qui n'existe qu'une fois les
+	# migrations passees. Tout demarrer d'un coup ferait echouer le healthcheck de
+	# l'API sur une machine propre.
+	$(COMPOSE) up -d --build --wait db
+	$(MAKE) --no-print-directory migrate
 	$(COMPOSE) up -d --build --wait
-	$(MAKE) migrate
 	@echo
 	@echo "  API    http://localhost:$${API_PORT:-8000}/docs"
 	@echo "  Site   http://localhost:$${WEB_PORT:-3000}"

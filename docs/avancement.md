@@ -68,9 +68,14 @@ planche de style produites et relues.
 
 **Constaté le 23/11/2026 :**
 
-- `make up` → `db`, `api`, `web` sains ; migration 001 appliquee ; `/v1/sante` repond
-  **200** base allumee, **503** base eteinte (verifie en l'arretant), `/docs` repond 200,
+- `make up` **sur une base vierge** → `db`, `api`, `web` sains ; migration 001
+  appliquee ; PostGIS 3.7.0 ; les quatre schemas crees ; `/v1/sante` repond **200**
+  base allumee, **503** base eteinte (verifie en l'arretant), et **503 avec
+  `schema_pret: false`** si les migrations ne sont pas passees ; `/docs` repond 200 ;
   le site rend « Où faire le plein ? ».
+- `make migrate` relance → « Base a jour : aucune migration a appliquer ». Et si un
+  fichier deja applique est modifie, le script s'arrete en le disant plutot que de
+  laisser deux bases diverger.
 - `make check` → lint, formatage, typage strict et **221 tests** (112 Python + 109 front)
   au vert.
 - `make captures` → 30 captures sur 3 appareils × 2 themes, compressees de 28,4 Mo a

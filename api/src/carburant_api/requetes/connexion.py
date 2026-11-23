@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from psycopg import AsyncConnection
+from psycopg.errors import UndefinedTable
 from psycopg_pool import AsyncConnectionPool
 
 type Pool = AsyncConnectionPool[AsyncConnection[Any]]
@@ -47,6 +48,14 @@ class EtatBase:
     """Ce que /v1/sante a besoin de savoir sur la base."""
 
     joignable: bool
+    """La base repond-elle ?"""
+    schema_pret: bool
+    """Les migrations ont-elles ete appliquees ?
+
+    Distinct de `joignable` a dessein : une base qui repond mais dont le schema est
+    absent n'est pas la meme panne qu'une base injoignable, et ne se repare pas de la
+    meme facon. Le cas se produit vraiment, sur une machine propre, entre le demarrage
+    du conteneur et l'application des migrations."""
     derniere_collecte_reussie: dt.datetime | None
 
 
@@ -62,11 +71,16 @@ async def lire_etat(pool: Pool) -> EtatBase:
                 "SELECT max(fin) FROM meta.execution_etl WHERE statut = 'succes'"
             )
             ligne = await curseur.fetchone()
+    except UndefinedTable:
+        # La base repond, mais les migrations ne sont pas passees. Cas reel, constate
+        # sur une machine propre entre le demarrage du conteneur et `make migrate`.
+        return EtatBase(joignable=True, schema_pret=False, derniere_collecte_reussie=None)
     except Exception:
-        return EtatBase(joignable=False, derniere_collecte_reussie=None)
+        return EtatBase(joignable=False, schema_pret=False, derniere_collecte_reussie=None)
 
     derniere = ligne[0] if ligne else None
     return EtatBase(
         joignable=True,
+        schema_pret=True,
         derniere_collecte_reussie=derniere if isinstance(derniere, dt.datetime) else None,
     )

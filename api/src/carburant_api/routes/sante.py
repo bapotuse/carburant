@@ -35,6 +35,13 @@ class Sante(BaseModel):
         examples=["ok"],
     )
     base_joignable: bool = Field(description="La base de donnees repond-elle ?")
+    schema_pret: bool = Field(
+        description=(
+            "Les migrations ont-elles ete appliquees ? Une base qui repond avec un "
+            "schema absent n'est pas la meme panne qu'une base injoignable : la "
+            "reparation est `make migrate`, pas un redemarrage."
+        )
+    )
     age_derniere_collecte_minutes: Annotated[int, Field(ge=0)] | None = Field(
         default=None,
         description=(
@@ -81,7 +88,7 @@ async def sante(requete: Request, reponse: Response) -> Sante:
     # que le service est en etat. Des que la premiere collecte aura abouti, un age
     # au-dela du seuil fera basculer en degrade.
     frais = age is None or age <= seuil
-    bon = etat.joignable and frais
+    bon = etat.joignable and etat.schema_pret and frais
 
     if not bon:
         reponse.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -89,6 +96,7 @@ async def sante(requete: Request, reponse: Response) -> Sante:
     return Sante(
         statut="ok" if bon else "degrade",
         base_joignable=etat.joignable,
+        schema_pret=etat.schema_pret,
         age_derniere_collecte_minutes=age,
         age_max_minutes=seuil,
         version=VERSION,
