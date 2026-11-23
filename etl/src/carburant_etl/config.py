@@ -12,11 +12,14 @@ from typing import Final, Self
 
 URL_FLUX_EXPORT: Final = (
     "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets"
-    "/prix-des-carburants-en-france-flux-instantane-v2/exports/parquet"
+    "/prix-des-carburants-en-france-flux-instantane-v2/exports/json"
 )
 """Export complet du flux v2. `exports/` et non `records/`, qui est pagine et plafonne.
-Le parquet est le plus leger des trois formats : 2,8 Mo contre 3,2 en csv et 4,6 en json
-(docs/reconnaissance.md section 1.1)."""
+Le json est retenu plutot que le parquet, pourtant plus leger (2,8 Mo contre 4,6) :
+c'est le seul format ou les champs multivalues -- `services_service`,
+`carburants_disponibles` -- sont de vraies listes, et non des chaines a redecouper.
+L'ecart de poids est absorbe par la compression a la volee (docs/reconnaissance.md
+section 1.1)."""
 
 URL_AMONT_INSTANTANE: Final = "https://donnees.roulez-eco.fr/opendata/instantane_ruptures"
 """Source amont, gardee en repli : data.economie a deja connu des indisponibilites."""

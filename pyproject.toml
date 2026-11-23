@@ -86,9 +86,13 @@ ignore_missing_imports = true
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
 testpaths = ["etl/tests", "api/tests", "mcp/tests"]
-addopts = "-q --strict-markers --strict-config --import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: necessite une base PostGIS joignable",
+    "reseau: appelle vraiment une source publique (exclu de make check)",
 ]
+# Les tests reseau sont exclus par defaut : `make check` doit passer hors ligne et ne
+# pas dependre de la disponibilite d'un service tiers. On les lance explicitement avec
+# `uv run pytest -m reseau`, et la CI les lance sur `main` uniquement.
+addopts = "-q --strict-markers --strict-config --import-mode=importlib -m 'not reseau'"
