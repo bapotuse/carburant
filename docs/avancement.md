@@ -1,12 +1,14 @@
 # Avancement
 
 ## Prochaine action
-**J0-14** : pousser `main` sur `bapotuse/carburant` et voir la CI passer au vert.
-Bloqué par l'action 1 de Baptiste (`gh auth login` ou création manuelle du dépôt).
+**Jalon 1** : ETL complet (raw → staging → `dim_station` + `fact_prix`), puis
+`/v1/stations/proches`, `/v1/geocode`, et l'accueil mobile.
 
-Tout le reste du Jalon 0 est fait et vérifié. Dès le dépôt créé : J0-14, puis
-**[VALIDATION] J0-15** — la planche de style attend le choix de Baptiste, les captures
-sont dans `docs/captures/J0/`.
+Le Jalon 0 est terminé : `make up` et `make check` verts sur machine propre, dépôt
+poussé sur https://github.com/bapotuse/carburant, **CI verte sur les 3 jobs**.
+Seule la paire typographique reste formellement ouverte : la paire B est appliquée par
+défaut, les paires A et C restent visibles sur `/planche-de-style` et en changer ne
+coûte que trois lignes.
 
 ## En attente de Baptiste
 Le cadrage est répondu (« ok » du 23/11/2026 : les 15 recommandations par défaut s'appliquent, voir
@@ -14,7 +16,7 @@ Le cadrage est répondu (« ok » du 23/11/2026 : les 15 recommandations par dé
 
 | Action | Débloque | Statut |
 |---|---|---|
-| 1 — `gh auth login` (ou création manuelle du dépôt `bapotuse/carburant`) | J0-12, J0-14 : dépôt distant et CI | **en attente** |
+| 1 — dépôt GitHub + application Claude installée | J0-12, J0-14 | ✅ **fait le 23/11/2026** |
 | 2 — ports 80/443 dans la *security list* du VCN Oracle | Jalon 1 : mise en ligne | en attente |
 | 3 — IP publique + utilisateur du VPS (`ubuntu` ou `opc`) | Jalon 1 : déploiement, choix de l'image PostGIS | en attente |
 | 4 — nom de domaine en `.fr` + 2 enregistrements `A` | Jalon 1 : HTTPS, donc géolocalisation testable | en attente |
@@ -47,9 +49,9 @@ Légende : ✅ fait et vérifié · ⏳ écrit, en attente d'une action de Bapti
 | J0-9 ✅ | `pre-commit` pour les deux côtés (ruff, mypy, eslint, prettier, détection de secrets) | `pre-commit run --all-files` |
 | J0-10 ✅ | Un test par brique, qui échoue si la brique est cassée : helper de format français (`1,879 €`, `23 nov.`, espaces insécables) côté Python, un test Vitest, un test Playwright de démarrage | `make test` |
 | J0-11 ✅ | `make check` = lint + format + typage + tests, des deux côtés, en une commande | `make check` → sortie 0 |
-| J0-12 ⏳ | CI GitHub Actions : lint, typage, tests Python avec un service PostGIS, tests front, sur push et PR | `gh run list --limit 1` → `success` (après J0-14) |
+| J0-12 ✅ | CI GitHub Actions : lint, typage, tests Python avec un service PostGIS, tests front, sur push et PR | `gh run list --limit 1` → `success` (après J0-14) |
 | J0-13 ✅ | README squelette : schéma d'architecture Mermaid, lancement en une commande, liens | `grep -q '```mermaid' README.md && grep -q 'make up' README.md` |
-| J0-14 ⏳ | Dépôt distant `bapotuse/carburant` créé, `main` poussée, CI verte | `git push -u origin main && gh run watch` |
+| J0-14 ✅ | Dépôt distant `bapotuse/carburant` créé, `main` poussée, CI verte | `git push -u origin main && gh run watch` |
 | J0-15 🎨 | **[VALIDATION]** Planche de style : page statique rendant 2 ou 3 paires typographiques × palette claire et sombre × prix façon totem × jauge × ticket de caisse. Valeurs d'exemple **étiquetées comme telles**. Un test automatisé vérifie le contraste de chaque paire de tokens réellement utilisée | `make captures` puis ouverture des captures de `docs/captures/J0/` (iPhone SE 375×667, Pixel 7, bureau 1440×900, thèmes clair et sombre) et comparaison à `docs/anti-patterns-ia.md` |
 
 Notes d'exécution :
@@ -81,8 +83,9 @@ planche de style produites et relues.
 - `make captures` → 30 captures sur 3 appareils × 2 themes, compressees de 28,4 Mo a
   6,1 Mo, dans `docs/captures/J0/`, relues contre `docs/anti-patterns-ia.md`.
 - `pre-commit run --all-files` → 14 hooks au vert.
-- **Non verifie** : la CI sur GitHub (le depot distant n'existe pas encore) et le
-  comportement reel sur iOS (voir `docs/a-verifier.md`, lignes 15 et 18).
+- **CI GitHub verte** sur les 3 jobs (Python avec service PostGIS, front, pre-commit) :
+  https://github.com/bapotuse/carburant/actions/runs/45232820226
+- **Non verifie** : le comportement reel sur iOS (voir `docs/a-verifier.md`, ligne 15).
 
 ### J1 — Tranche verticale en ligne
 - [ ] ETL minimal : extract (export du flux v2) → raw → staging → `dim_station` + `fact_prix` (grain = changement de prix, idempotent)
