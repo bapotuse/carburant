@@ -1,8 +1,27 @@
 # Avancement
 
 ## Prochaine action
-**Jalon 1** : ETL complet (raw → staging → `dim_station` + `fact_prix`), puis
-`/v1/stations/proches`, `/v1/geocode`, et l'accueil mobile.
+**J1-2** : charger l'export téléchargé en `staging`, au format long — une ligne par
+station × carburant.
+
+Le téléchargement (J1-1) est fait et testé, y compris contre la vraie source
+(`etl/src/carburant_etl/sources/flux_v2.py`, `uv run pytest -m reseau`). Ce qui suit,
+dans l'ordre :
+
+1. **J1-2** `staging` : aplatir le JSON en long, valider avec pydantic à la frontière,
+   compter les erreurs par champ, charger par `COPY`.
+2. **J1-3** `marts` : `dim_station` (geography + GiST, département pris du flux) et
+   `fact_prix` partitionné par mois, grain = un changement de prix, idempotent.
+   Attention aux bornes de partition **en UTC** et à la partition du mois précédent.
+3. **J1-4** API : `/v1/stations/proches`, `/v1/geocode` (proxy Géoplateforme avec cache
+   et la règle d'ambiguïté `score < 0,80 ou écart < 0,05`).
+4. **J1-5** Web : accueil mobile, champ d'adresse avec anti-rebond, « Ma position »,
+   liste triée par prix, prix façon totem.
+5. **J1-6** Déploiement : workflow GitHub Actions (images GHCR + ssh depuis le runner),
+   Caddy, HTTPS, collecte planifiée par supercronic.
+
+Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seuils, et
+`docs/decisions.md` avant de refaire un choix déjà tranché.
 
 Le Jalon 0 est terminé : `make up` et `make check` verts sur machine propre, dépôt
 poussé sur https://github.com/bapotuse/carburant, **CI verte sur les 3 jobs**.
@@ -11,19 +30,23 @@ défaut, les paires A et C restent visibles sur `/planche-de-style` et en change
 coûte que trois lignes.
 
 ## En attente de Baptiste
-Le cadrage est répondu (« ok » du 23/11/2026 : les 15 recommandations par défaut s'appliquent, voir
-`docs/decisions.md`). Restent les **actions sur ses comptes** :
 
-| Action | Débloque | Statut |
-|---|---|---|
-| 1 — dépôt GitHub + application Claude installée | J0-12, J0-14 | ✅ **fait le 23/11/2026** |
-| 2 — ports 80/443 dans la *security list* du VCN Oracle | Jalon 1 : mise en ligne | en attente |
-| 3 — IP publique + utilisateur du VPS (`ubuntu` ou `opc`) | Jalon 1 : déploiement, choix de l'image PostGIS | en attente |
-| 4 — nom de domaine en `.fr` + 2 enregistrements `A` | Jalon 1 : HTTPS, donc géolocalisation testable | en attente |
-| 5 — compte healthchecks.io | Jalon 6 : alertes | en attente |
-| 6 — compte PyPI + 2FA | Jalon 4 : `uvx prix-carburant-mcp` | en attente |
+| # | Action | Débloque | Statut |
+|---|---|---|---|
+| 1 | Dépôt GitHub + application Claude installée dessus | J0-12, J0-14 | ✅ fait le 23/11/2026 |
+| 2 | IP et utilisateur du VPS | Jalon 1 : déploiement | ✅ `opc@144.24.195.97` (Oracle Linux) |
+| 3 | **Ports 80 et 443 dans la *security list* du VCN Oracle** | mise en ligne du Jalon 1 | ⏳ instructions données le 23/11, il ne savait pas où cliquer |
+| 4 | **Nom de domaine** — il n'en a pas. Option a : acheter un `.fr` (~7 €/an, recommandé). Option b : sous-domaine gratuit DuckDNS. Sans domaine, pas de HTTPS, donc **pas de géolocalisation testable sur son iPhone** | mise en ligne du Jalon 1 | ⏳ en attente de son choix |
+| 5 | Trois secrets GitHub pour le déploiement (`VPS_HOST`, `VPS_USER`, clé privée) | fin du Jalon 1 | 🔜 à demander quand le workflow sera écrit |
+| 6 | Compte healthchecks.io | Jalon 6 : alertes | 🔜 plus tard |
+| 7 | Compte PyPI + 2FA | Jalon 4 : `uvx prix-carburant-mcp` | 🔜 plus tard |
 
-**Rien de tout cela ne bloque J0-1 à J0-11 ni J0-15**, qui s'enchaînent sans lui.
+**Validation de goût encore ouverte** : la paire typographique. La **paire B**
+(Newsreader + Source Sans 3) est appliquée par défaut faute d'objection ; les paires A
+et C restent déclarées et visibles sur `/planche-de-style`. En changer coûte trois
+lignes dans `web/app/styles/tokens.css` plus le préchargement dans `nuxt.config.ts`.
+
+**Rien de tout cela ne bloque le travail du Jalon 1** jusqu'à sa mise en ligne.
 
 ## Jalons
 Chaque jalon se termine par : critère de sortie vérifié, bilan à Baptiste, mise à jour de comprendre-le-projet.md.
