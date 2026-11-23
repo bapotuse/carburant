@@ -57,9 +57,13 @@
   --fraicheur-perime: #6b655c; /*  5,13 /  4,53 */
 
   /* ---------------------------------------------------- typographie */
-  --police-titre: 'Fraunces', 'Iowan Old Style', Georgia, serif;
-  --police-texte: 'Public Sans', 'Helvetica Neue', system-ui, sans-serif;
-  --police-prix: 'Fraunces', Georgia, serif;
+  /* Paire B de la planche de style : Newsreader (serif editorial, chiffres
+   * tabulaires par defaut) + Source Sans 3. Les paires A et C restent declarees dans
+   * polices.css et visibles sur /planche-de-style tant que le choix n'est pas fige :
+   * changer d'avis ne coute que ces trois lignes. */
+  --police-titre: 'Newsreader', 'Iowan Old Style', Georgia, serif;
+  --police-texte: 'Source Sans 3', 'Helvetica Neue', system-ui, sans-serif;
+  --police-prix: 'Newsreader', Georgia, serif;
   --police-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
 
   /* Echelle nette, avec des sauts francs. Les prix sont hors echelle. */

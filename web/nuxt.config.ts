@@ -48,7 +48,7 @@ export default defineNuxtConfig({
           rel: 'preload',
           as: 'font',
           type: 'font/woff2',
-          href: '/polices/petrona-latin-wght-normal.woff2',
+          href: '/polices/newsreader-latin-wght-normal.woff2',
           crossorigin: 'anonymous',
         },
       ],
