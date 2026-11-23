@@ -73,6 +73,12 @@ jobs:
       - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
+        with:
+          # Le package.json est dans web/, pas a la racine : sans cette ligne
+          # l'action ne trouve pas le champ `packageManager` et s'arrete sur
+          # « No pnpm version is specified ». On evite ainsi de redeclarer la
+          # version de pnpm ici, ou elle divergerait tot ou tard.
+          package_json_file: web/package.json
 
       - uses: actions/setup-node@v6
         with:
@@ -137,6 +143,12 @@ jobs:
       - run: uv python install ${{ env.PYTHON_VERSION }}
       - run: uv sync --all-packages --frozen
       - uses: pnpm/action-setup@v4
+        with:
+          # Le package.json est dans web/, pas a la racine : sans cette ligne
+          # l'action ne trouve pas le champ `packageManager` et s'arrete sur
+          # « No pnpm version is specified ». On evite ainsi de redeclarer la
+          # version de pnpm ici, ou elle divergerait tot ou tard.
+          package_json_file: web/package.json
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
