@@ -63,6 +63,9 @@ allowed-confusables = ["\u202f"]
 # Les scripts de infra/scripts/ sont des outils en ligne de commande : ecrire sur la
 # sortie standard est leur raison d'etre.
 "infra/scripts/*" = ["T20"]
+# Meme raison pour les points d'entree en ligne de commande : leur sortie EST
+# l'interface. Les journaux, eux, passent par `logging`.
+"*/cli.py" = ["T20"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -92,7 +95,9 @@ markers = [
     "integration: necessite une base PostGIS joignable",
     "reseau: appelle vraiment une source publique (exclu de make check)",
 ]
-# Les tests reseau sont exclus par defaut : `make check` doit passer hors ligne et ne
-# pas dependre de la disponibilite d'un service tiers. On les lance explicitement avec
-# `uv run pytest -m reseau`, et la CI les lance sur `main` uniquement.
-addopts = "-q --strict-markers --strict-config --import-mode=importlib -m 'not reseau'"
+# Les tests `reseau` et `integration` sont exclus par defaut : `make check` doit
+# passer hors ligne et sans base. On les lance explicitement avec
+# `uv run pytest -m reseau` et `uv run pytest -m integration` (celui-ci demande une
+# DATABASE_URL). La CI lance les tests d'integration a chaque execution, contre son
+# service PostGIS.
+addopts = "-q --strict-markers --strict-config --import-mode=importlib -m 'not reseau and not integration'"

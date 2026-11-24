@@ -44,6 +44,10 @@ COPY etl/ etl/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package carburant-etl
 
+# Les migrations : c'est le conteneur etl qui les applique (`etl migrate`), au
+# demarrage de la pile comme au deploiement.
+COPY infra/migrations/ infra/migrations/
+
 ENV PATH="/app/.venv/bin:${PATH}"
 
 # Utilisateur non-root, proprietaire du repertoire des fichiers bruts.

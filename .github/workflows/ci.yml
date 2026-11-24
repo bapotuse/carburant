@@ -63,6 +63,11 @@ jobs:
       - name: Tests
         run: uv run pytest
 
+      - name: Tests d'integration
+        # Contre le vrai service PostGIS du job : une base simulee ne dirait rien de
+        # COPY, des contraintes CHECK, du jsonb ni des transactions.
+        run: uv run pytest -m integration
+
   front:
     name: Front — lint, typage, tests
     runs-on: ubuntu-latest

@@ -27,14 +27,34 @@ import httpx
 from carburant_etl.config import URL_FLUX_EXPORT
 from carburant_etl.fuseau import maintenant
 
-TIMEOUT: Final = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
-"""Timeouts explicites : jamais de requete qui pend indefiniment."""
+TIMEOUT: Final = httpx.Timeout(connect=30.0, read=180.0, write=30.0, pool=30.0)
+"""Timeouts explicites : jamais de requete qui pend indefiniment.
 
-TENTATIVES: Final = 4
-"""Nombre total d'essais, avec un recul exponentiel entre chacun."""
+`connect` est a 30 s et non a 10 : constate le 24/11/2026, l'etablissement TLS vers
+data.economie.gouv.fr depasse regulierement 10 s quand la source est chargee, ce qui
+faisait echouer les quatre tentatives d'affilee sur un `handshake operation timed out`.
+`read` est large parce que l'export complet fait une trentaine de megaoctets."""
 
-RECUL_INITIAL: Final = 2.0
-"""Secondes avant le premier reessai. Double a chaque fois : 2, 4, 8."""
+TENTATIVES: Final = 5
+"""Nombre total d'essais, avec un recul exponentiel entre chacun.
+
+Cinq et non trois : `docs/specs/donnees.md` rappelle que data.economie a deja connu
+des indisponibilites, et on a constate le 24/11/2026 des salves de connexions
+reinitialisees ou trois tentatives d'affilee tombaient avant qu'une quatrieme passe.
+Avec une collecte toutes les 15 minutes, s'acharner 45 secondes coute moins cher que
+de rater un creneau."""
+
+RECUL_INITIAL: Final = 3.0
+"""Secondes avant le premier reessai. Double a chaque fois : 3, 6, 12, 24."""
+
+LIMITES: Final = httpx.Limits(max_keepalive_connections=0, max_connections=4)
+"""Pas de maintien de connexion.
+
+Une execution fait un seul gros telechargement : le keep-alive n'apporte rien, et il
+nuit. Constate le 24/11/2026 : quand une connexion est reinitialisee en cours de
+route, le reessai reprend la meme connexion morte dans le pool et echoue aussitot --
+les quatre tentatives tombent alors d'affilee sur le meme defaut. Sans keep-alive,
+chaque tentative repart sur une connexion neuve."""
 
 
 class CollecteEchouee(RuntimeError):
@@ -104,6 +124,7 @@ def telecharger(
     propre = client is None
     client = client or httpx.Client(
         timeout=TIMEOUT,
+        limits=LIMITES,
         follow_redirects=True,
         headers={"User-Agent": user_agent, "Accept-Encoding": "gzip, deflate"},
     )

@@ -1,18 +1,19 @@
 # Avancement
 
 ## Prochaine action
-**J1-2** : charger l'export téléchargé en `staging`, au format long — une ligne par
-station × carburant.
+**J1-3** : `marts.dim_station` et `marts.fact_prix`, grain = un changement de prix,
+idempotent. Attention aux bornes de partition **en UTC** et à la partition du mois
+précédent (`docs/reconnaissance.md` § 2.5).
 
-Le téléchargement (J1-1) est fait et testé, y compris contre la vraie source
-(`etl/src/carburant_etl/sources/flux_v2.py`, `uv run pytest -m reseau`). Ce qui suit,
-dans l'ordre :
+J1-1 (téléchargement) et J1-2 (staging) sont faits et vérifiés sur les vraies données.
+Ce qui suit, dans l'ordre :
 
-1. **J1-2** `staging` : aplatir le JSON en long, valider avec pydantic à la frontière,
-   compter les erreurs par champ, charger par `COPY`.
+1. ~~**J1-2** `staging`~~ ✅ fait le 24/11/2026.
 2. **J1-3** `marts` : `dim_station` (geography + GiST, département pris du flux) et
    `fact_prix` partitionné par mois, grain = un changement de prix, idempotent.
    Attention aux bornes de partition **en UTC** et à la partition du mois précédent.
+   C'est ici que se joue le critère de sortie « deux exécutions successives ne créent
+   aucun doublon ».
 3. **J1-4** API : `/v1/stations/proches`, `/v1/geocode` (proxy Géoplateforme avec cache
    et la règle d'ambiguïté `score < 0,80 ou écart < 0,05`).
 4. **J1-5** Web : accueil mobile, champ d'adresse avec anti-rebond, « Ma position »,
@@ -167,6 +168,24 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-24 — Jalon 1, étapes 1 et 2.** Téléchargement du flux (réessais, empreinte
+  dans le nom de fichier, purge), validation pydantic à la frontière raw → staging,
+  aplatissement au format long, chargement par `COPY`, migrations en Python,
+  commande `etl run` complète avec journal dans `meta.execution_etl`.
+  **Vérifié sur les vraies données** : 9 825 stations, 55 339 lignes de prix
+  (33 153 prix + 22 186 ruptures), **5 rejets** — tous des prix E85 à 1,99 €, soit
+  exactement les erreurs de saisie que la reconnaissance avait identifiées.
+  Chaîne complète constatée : `make up` sur base vierge → `etl run` → `/v1/sante`
+  annonce « il y a 0 minute ». Médianes en base conformes à la reconnaissance
+  (gazole 2,099, E85 0,869, GPLc 1,075).
+  **Défauts trouvés par des tests, pas par relecture** : deux collectes dans la même
+  seconde s'écrasaient (l'empreinte est désormais dans le nom) ; les fichiers de
+  migration ouvraient leur propre transaction et cassaient celle du lanceur ; le
+  répertoire des migrations déduit d'un nombre de dossiers parents échouait en
+  silence dans l'image ; le pool HTTP réessayait sur une connexion morte.
+  269 tests verts (160 Python + 109 front), plus 11 tests d'intégration contre une
+  vraie base PostGIS et 2 tests contre la vraie source.
 
 - **2026-11-23 — Jalon 0, socle.** Monorepo complet : workspace uv (Python 3.14,
   3 paquets), front Nuxt 4.6.4 en pnpm (Node 26), Docker Compose a 5 services avec

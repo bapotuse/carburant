@@ -101,11 +101,11 @@ def test_reessaie_puis_reussit(tmp_path: Path) -> None:
 
 
 @respx.mock
-def test_abandonne_apres_quatre_tentatives(tmp_path: Path) -> None:
+def test_abandonne_apres_cinq_tentatives(tmp_path: Path) -> None:
     route = respx.get(URL_FLUX_EXPORT).mock(return_value=httpx.Response(503))
-    with pytest.raises(CollecteEchouee, match="4 tentatives"):
+    with pytest.raises(CollecteEchouee, match="5 tentatives"):
         telecharger(tmp_path, user_agent=AGENT)
-    assert route.call_count == 4
+    assert route.call_count == 5
     assert list(tmp_path.glob("*.json.gz")) == []
 
 

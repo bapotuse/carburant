@@ -6,7 +6,9 @@
 --   marts    : modele d'exposition (dimensions, faits, snapshots, vues)
 --   meta     : journal des executions, source de la fraicheur affichee et des alertes
 
-BEGIN;
+-- Ce fichier NE gere PAS sa transaction : c'est le lanceur de migrations qui
+-- l'ouvre et la ferme (`carburant_etl.chargement.migrations`). Un `BEGIN`/`COMMIT`
+-- ici ferait sauter la transaction externe au milieu de l'application.
 
 CREATE EXTENSION IF NOT EXISTS postgis;
 
@@ -56,5 +58,3 @@ CREATE INDEX IF NOT EXISTS execution_etl_debut_idx
     ON meta.execution_etl (debut DESC);
 CREATE INDEX IF NOT EXISTS execution_etl_succes_idx
     ON meta.execution_etl (debut DESC) WHERE statut = 'succes';
-
-COMMIT;

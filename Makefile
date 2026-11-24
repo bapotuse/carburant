@@ -13,7 +13,7 @@ PNPM := cd web && pnpm
 # Jalon courant : destination des captures. `make captures JALON=J1` pour en changer.
 JALON ?= J0
 
-.PHONY: aide up down logs migrate etl test check captures deploy \
+.PHONY: aide up build down logs migrate etl test check captures deploy \
         lint format typage test-python test-front openapi client-api purger captures-brutes
 
 aide: ## Liste les commandes disponibles
@@ -28,12 +28,15 @@ up: ## Demarre la pile locale et applique les migrations
 	# `/v1/sante` interroge `meta.execution_etl`, qui n'existe qu'une fois les
 	# migrations passees. Tout demarrer d'un coup ferait echouer le healthcheck de
 	# l'API sur une machine propre.
-	$(COMPOSE) up -d --build --wait db
+	$(COMPOSE) up -d --wait db
 	$(MAKE) --no-print-directory migrate
-	$(COMPOSE) up -d --build --wait
+	$(COMPOSE) up -d --wait
 	@echo
 	@echo "  API    http://localhost:$${API_PORT:-8000}/docs"
 	@echo "  Site   http://localhost:$${WEB_PORT:-3000}"
+
+build: ## Reconstruit les images (compose les construit deja si elles manquent)
+	$(COMPOSE) build
 
 down: ## Arrete la pile (les volumes sont conserves)
 	$(COMPOSE) down
@@ -47,7 +50,7 @@ purger: ## Arrete la pile et efface les volumes -- DESTRUCTIF, demande confirmat
 	$(COMPOSE) down -v
 
 migrate: ## Applique les migrations SQL non encore appliquees
-	./infra/scripts/migrer.sh
+	$(COMPOSE) run --rm etl etl migrate
 
 # ----------------------------------------------------------------- ETL
 etl: ## Lance une collecte complete (extract, transform, load, qualite)
