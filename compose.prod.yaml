@@ -1,0 +1,117 @@
+# Pile de production, telle qu'elle tourne sur le VPS.
+#
+# Ce fichier est **autonome** : il ne surcharge pas compose.yaml. Une surcharge
+# aurait l'air plus econome, mais Compose fusionne certaines cles en ajoutant au
+# lieu de remplacer (`profiles`, `networks`), et on se retrouve a deviner ce qui
+# tourne vraiment. Ici, ce qu'on lit est ce qui tourne.
+#
+# Differences avec le developpement :
+#   - les images viennent de GHCR, construites par la CI pour amd64 et arm64 ;
+#   - rien n'est construit sur le VPS (1 Go de RAM n'y suffirait pas) ;
+#   - seul Caddy publie des ports ; l'API et le site ne sont joignables que par lui ;
+#   - l'ETL tourne en planificateur (supercronic), pas a la demande.
+name: carburant
+
+services:
+  db:
+    # Choisie par le deploiement selon l'architecture du VPS : postgis/postgis ne
+    # publie pas d'image arm64 (verifie le 23/11/2026). Sur Ampere A1, la valeur est
+    # imresamu/postgis:18-3.6-alpine. Voir docs/decisions.md.
+    image: ${IMAGE_DB:-postgis/postgis:18-3.7}
+    container_name: carburant_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-carburant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans le .env du VPS}
+      POSTGRES_DB: ${POSTGRES_DB:-carburant}
+      PGTZ: Europe/Paris
+    volumes:
+      # PostgreSQL 18+ : le volume se monte sur /var/lib/postgresql, pas sur
+      # .../data. Voir le commentaire detaille dans compose.yaml.
+      - donnees_db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-carburant} -d ${POSTGRES_DB:-carburant}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks: [interne]
+
+  api:
+    image: ${REGISTRE:-ghcr.io/bapotuse}/carburant-api:${TAG:-main}
+    container_name: carburant_api
+    init: true
+    env_file: [.env]
+    # Aucun `ports:` : l'API n'est joignable que par Caddy, sur le reseau Docker.
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+    networks: [interne, sortie]
+
+  web:
+    image: ${REGISTRE:-ghcr.io/bapotuse}/carburant-web:${TAG:-main}
+    container_name: carburant_web
+    init: true
+    environment:
+      # Le navigateur appelle l'API par le domaine public, derriere Caddy ; le rendu
+      # serveur l'appelle par le reseau Docker. Confondre les deux marche en
+      # developpement et casse en production.
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-https://${CARBURANT_DOMAINE:?CARBURANT_DOMAINE manquant dans le .env du VPS}}
+      NUXT_API_BASE_INTERNE: http://api:8000
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+    networks: [interne]
+
+  etl:
+    image: ${REGISTRE:-ghcr.io/bapotuse}/carburant-etl:${TAG:-main}
+    container_name: carburant_etl
+    init: true
+    env_file: [.env]
+    # En production, le conteneur est un planificateur : supercronic rejoue
+    # `etl run` toutes les quinze minutes (infra/cron/carburant.cron).
+    command: ["supercronic", "/app/infra/cron/carburant.cron"]
+    volumes:
+      - donnees_brutes:/app/data/raw
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+    networks: [interne, sortie]
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: carburant_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      # HTTP/3. Sans ce port, Caddy annonce `alt-svc` et les navigateurs
+      # essaient QUIC dans le vide avant de retomber sur TCP.
+      - "443:443/udp"
+    environment:
+      CARBURANT_DOMAINE: ${CARBURANT_DOMAINE:?CARBURANT_DOMAINE manquant dans le .env du VPS}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Les certificats obtenus survivent aux redeploiements : sans ce volume,
+      # chaque `up` repart a zero et Let's Encrypt finit par limiter le debit.
+      - caddy_donnees:/data
+      - caddy_config:/config
+    depends_on:
+      web: {condition: service_started}
+    networks: [interne]
+
+networks:
+  interne:
+    name: carburant_interne
+  sortie:
+    name: carburant_sortie
+
+volumes:
+  donnees_db:
+    name: carburant_donnees_db
+  donnees_brutes:
+    name: carburant_donnees_brutes
+  caddy_donnees:
+    name: carburant_caddy_donnees
+  caddy_config:
+    name: carburant_caddy_config

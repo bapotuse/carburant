@@ -34,6 +34,19 @@ est `dnf`. Architecture et ressources encore inconnues (voir `docs/a-verifier.md
 ## Caddy
 Reverse proxy partagé (un bloc par site, pour accueillir les autres projets), HTTPS automatique (il faut un nom de domaine qui pointe vers l'IP ; sans domaine, propose un sous-domaine gratuit type DuckDNS), compression, en-têtes de sécurité (CSP compatible avec MapLibre et ses workers), cache long des assets versionnés. Routes : site, API, `/mcp` pour le serveur MCP HTTP.
 
+**[corrigé 24/11/2026] La CSP n'est pas posée par Caddy pour le site.** Mesuré : Nuxt émet
+deux scripts **en ligne** dans chaque page (carte d'import, configuration publique). Une
+politique `script-src 'self'` posée par le proxy les bloque, et le site reste une page statique
+où plus rien ne répond. Le site pose donc sa propre politique, avec un **nonce par requête**
+(`web/server/plugins/csp.ts`). Caddy pose les autres en-têtes de sécurité pour tout le monde,
+et une CSP distincte pour l'API, plus permissive parce que Swagger UI charge ses fichiers
+depuis jsdelivr. Deux en-têtes CSP sur une même réponse ne s'additionnent pas : le navigateur
+applique l'intersection.
+
+**[précisé 24/11/2026]** Pas de directive `email` : une variable d'environnement vide produit
+un `email` sans argument et Caddy redémarre en boucle. Et pas de `Cache-Control` ajouté sur
+`/_nuxt/*` : Nitro l'envoie déjà. Le Caddyfile est validé et vérifié en format par la CI.
+
 ## CI/CD (GitHub Actions)
 - À chaque push et PR : lint, typage, tests Python (avec un service PostGIS), tests front, Playwright, Lighthouse CI en profil mobile, vérification que le client API généré est à jour.
 - Sur `main` : build des images multi-architecture, publication sur GHCR.
@@ -41,7 +54,11 @@ Reverse proxy partagé (un bloc par site, pour accueillir les autres projets), H
 - Compte GitHub de Baptiste : `bapotuse`. Création du dépôt avec `gh` si Baptiste a fait `gh auth login` (à guider), sinon création manuelle guidée.
 
 ## Exploitation
-- ETL planifié toutes les 15 min dans le conteneur etl.
+- ETL planifié toutes les 15 min dans le conteneur etl. **[précisé 24/11/2026]** supercronic
+  0.2.51, binaire vérifié par empreinte dans l'image, table dans `infra/cron/carburant.cron`,
+  aux minutes 2, 17, 32 et 47 (à l'heure ronde, tout le monde interroge la même source en même
+  temps). Planification **en production seulement** : en développement la collecte reste à la
+  demande (`make etl`).
 - Sauvegardes : `pg_dump` quotidien compressé, rotation 7 quotidiennes + 4 hebdomadaires, copie hors du VPS (destination à choisir en cadrage), procédure de restauration écrite et exécutée une fois pour de vrai.
 - Monitoring minimal : `/v1/sante` ; logs JSON sur stdout ; alerte si la collecte échoue ou si les données vieillissent, via un « dead man's switch » (par exemple healthchecks.io : l'ETL envoie un signal après chaque exécution réussie, et l'absence de signal alerte Baptiste par mail ou notification) ; surveillance de disponibilité de la page d'accueil par le même service.
 - Sécurité : mises à jour de sécurité automatiques (unattended-upgrades), secrets dans un `.env` sur le VPS (droits 600), aucun port d'administration exposé.

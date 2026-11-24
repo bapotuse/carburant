@@ -1,0 +1,162 @@
+name: Déploiement
+
+on:
+  push:
+    branches: [main]
+  # `make deploy` passe par ici (gh workflow run), pour redeployer sans commit.
+  workflow_dispatch:
+
+concurrency:
+  # Deux deploiements en parallele sur la meme machine, c'est une pile a moitie
+  # remplacee. On attend que le precedent finisse plutot que de l'annuler.
+  group: deploiement
+  cancel-in-progress: false
+
+env:
+  REGISTRE: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  images:
+    name: Images multi-architecture
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        brique: [api, web, etl]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Connexion a GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire et publier carburant-${{ matrix.brique }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/${{ matrix.brique }}.Dockerfile
+          # Le VPS Oracle Free Tier peut etre amd64 (micro) ou aarch64 (Ampere A1).
+          # On publie les deux : le deploiement n'a pas a savoir.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRE }}/carburant-${{ matrix.brique }}:${{ github.sha }}
+            ${{ env.REGISTRE }}/carburant-${{ matrix.brique }}:main
+          cache-from: type=gha,scope=${{ matrix.brique }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.brique }}
+
+  secrets-presents:
+    name: Le VPS est-il configure ?
+    runs-on: ubuntu-latest
+    outputs:
+      pret: ${{ steps.verifier.outputs.pret }}
+    steps:
+      - id: verifier
+        # Le contexte `secrets` n'est pas lisible dans un `if:` de job : on le lit
+        # dans une etape, et les jobs suivants dependent de sa sortie. Sans cela,
+        # tant que Baptiste n'a pas ajoute les secrets, chaque push afficherait un
+        # deploiement en echec.
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_CLE_PRIVEE: ${{ secrets.VPS_CLE_PRIVEE }}
+        run: |
+          set -eu
+          if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ] && [ -n "$VPS_CLE_PRIVEE" ]; then
+            echo "pret=true" >> "$GITHUB_OUTPUT"
+            echo "Les trois secrets du VPS sont presents."
+          else
+            echo "pret=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploiement ignore : il manque VPS_HOST, VPS_USER ou VPS_CLE_PRIVEE dans les secrets du depot. Les images sont publiees quand meme."
+          fi
+
+  deploiement:
+    name: Deploiement sur le VPS
+    needs: [images, secrets-presents]
+    if: needs.secrets-presents.outputs.pret == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: production
+      url: https://${{ vars.CARBURANT_DOMAINE }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Preparer la cle ssh
+        env:
+          CLE: ${{ secrets.VPS_CLE_PRIVEE }}
+          HOTE: ${{ secrets.VPS_HOST }}
+        run: |
+          set -eu
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$CLE" > ~/.ssh/deploiement
+          chmod 600 ~/.ssh/deploiement
+          # On enregistre la cle d'hote telle qu'elle se presente. C'est du TOFU :
+          # acceptable pour une machine dont on connait l'IP et qu'on vient de
+          # creer, et bien meilleur que `StrictHostKeyChecking=no`, qui accepterait
+          # n'importe quel changement de cle par la suite.
+          ssh-keyscan -H "$HOTE" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copier la configuration sur le VPS
+        env:
+          HOTE: ${{ secrets.VPS_HOST }}
+          UTILISATEUR: ${{ secrets.VPS_USER }}
+        run: |
+          set -eu
+          cible="$UTILISATEUR@$HOTE"
+          ssh -i ~/.ssh/deploiement "$cible" 'mkdir -p /opt/carburant/infra/caddy'
+          scp -i ~/.ssh/deploiement \
+            compose.prod.yaml infra/scripts/sur-le-vps.sh "$cible:/opt/carburant/"
+          scp -i ~/.ssh/deploiement \
+            infra/caddy/Caddyfile "$cible:/opt/carburant/infra/caddy/Caddyfile"
+          ssh -i ~/.ssh/deploiement "$cible" 'chmod +x /opt/carburant/sur-le-vps.sh'
+
+      - name: Authentifier le VPS aupres de GHCR
+        env:
+          HOTE: ${{ secrets.VPS_HOST }}
+          UTILISATEUR: ${{ secrets.VPS_USER }}
+          JETON: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          # Le jeton passe par l'entree standard de la commande distante : il
+          # n'apparait ni dans la ligne de commande, ni dans `ps` sur le VPS. Il
+          # expire a la fin de ce job.
+          printf '%s' "$JETON" | ssh -i ~/.ssh/deploiement "$UTILISATEUR@$HOTE" \
+            "docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+
+      - name: Deployer
+        env:
+          HOTE: ${{ secrets.VPS_HOST }}
+          UTILISATEUR: ${{ secrets.VPS_USER }}
+        run: |
+          set -eu
+          ssh -i ~/.ssh/deploiement "$UTILISATEUR@$HOTE" \
+            "REGISTRE='${{ env.REGISTRE }}' TAG='${{ github.sha }}' bash /opt/carburant/sur-le-vps.sh"
+
+      - name: Essai depuis l'exterieur
+        if: vars.CARBURANT_DOMAINE != ''
+        run: |
+          set -eu
+          domaine='${{ vars.CARBURANT_DOMAINE }}'
+          # Depuis le runner, donc par le vrai chemin public : DNS, Caddy, TLS.
+          code=$(curl -sS -o /tmp/accueil.html -w '%{http_code}' "https://$domaine/")
+          echo "GET https://$domaine/ -> $code"
+          test "$code" = 200
+          grep -q 'Où faire le plein' /tmp/accueil.html
+          sante=$(curl -sS "https://$domaine/v1/sante")
+          echo "/v1/sante -> $sante"
+          printf '%s' "$sante" | grep -q '"statut"'
+
+      - name: Effacer la cle
+        if: always()
+        run: rm -f ~/.ssh/deploiement

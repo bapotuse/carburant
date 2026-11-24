@@ -34,6 +34,14 @@ async function chercher(page: import('@playwright/test').Page, texte: string) {
 }
 
 test('le parcours complet : une adresse, puis des prix réels', async ({ page }, infos) => {
+  // La console est surveillee pendant tout le parcours. Ce n'est pas du zele : une
+  // politique de securite du contenu trop stricte bloque les scripts en ligne de
+  // Nuxt, et le site reste une page statique ou plus rien ne repond — sans qu'aucune
+  // autre assertion ne s'en apercoive tant qu'on ne touche pas aux boutons.
+  const plaintes: string[] = []
+  page.on('console', (m) => m.type() === 'error' && plaintes.push(m.text()))
+  page.on('pageerror', (e) => plaintes.push(`pageerror: ${e.message}`))
+
   await page.goto('/')
   await page.evaluate(() => document.fonts.ready)
 
@@ -77,6 +85,8 @@ test('le parcours complet : une adresse, puis des prix réels', async ({ page },
     path: join(await dossier(), `accueil-resultats-${infos.project.name}.png`),
     fullPage: true,
   })
+
+  expect(plaintes, plaintes.join('\n')).toEqual([])
 })
 
 test('changer de carburant relance la recherche', async ({ page }) => {

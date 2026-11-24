@@ -57,10 +57,10 @@ services:
       db: {condition: service_healthy}
     restart: unless-stopped
     networks: [interne, sortie]
-    # Au Jalon 0, le conteneur etl n'a rien a planifier : il n'est donc pas demarre
-    # par `make up`. `make etl` le lance a la demande (`docker compose run` active le
-    # profil tout seul). Le profil disparaitra au Jalon 1, quand supercronic
-    # planifiera la collecte toutes les 15 minutes.
+    # En developpement, la collecte reste a la demande : `make etl` la lance
+    # (`docker compose run` active le profil tout seul). Personne ne veut qu'un
+    # `make up` sur son poste se mette a interroger la vraie source toutes les
+    # quinze minutes. C'est compose.prod.yaml qui fait tourner supercronic.
     profiles: [planification]
 
   api:

@@ -1,0 +1,12 @@
+# Planification de la collecte, lue par supercronic dans le conteneur etl.
+#
+# Le flux officiel est republie en continu ; toutes les quinze minutes est la
+# frequence annoncee sur le site et celle que le site affiche aux visiteurs.
+#
+# Les minutes sont decalees de deux : a l'heure ronde, tout le monde interroge la
+# meme source en meme temps. Deux minutes plus tard, c'est plus calme, et la
+# fraicheur affichee n'en souffre pas.
+#
+# Les heures sont celles du conteneur, c'est-a-dire UTC. La collecte ne depend pas
+# de l'heure locale : elle tourne 96 fois par jour, quoi qu'il arrive.
+2,17,32,47 * * * * etl run

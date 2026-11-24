@@ -137,6 +137,59 @@ jobs:
             exit 1
           fi
 
+  infra:
+    name: Infra — compose, Caddy, cron
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Un .env issu du modele suffit a demarrer
+        # Le modele est le seul mode d'emploi qu'aura Baptiste pour le .env du VPS.
+        # S'il manque une variable, c'est ici qu'on l'apprend, pas en production.
+        run: cp .env.example .env
+
+      - name: La pile de developpement est coherente
+        run: docker compose config --quiet
+
+      - name: La pile de production est coherente
+        run: docker compose -f compose.prod.yaml config --quiet
+        env:
+          CARBURANT_DOMAINE: carburant.exemple.fr
+
+      - name: Le Caddyfile est valide et bien formate
+        # Une directive mal formee ne se voit qu'au demarrage de Caddy, donc en
+        # production. Le 24/11/2026, une variable d'environnement vide produisait un
+        # `email` sans argument et Caddy redemarrait en boucle : c'est ce que cette
+        # etape attrape.
+        run: |
+          set -eu
+          docker run --rm -v "$PWD/infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e CARBURANT_DOMAINE=carburant.exemple.fr \
+            caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          difference=$(docker run --rm -v "$PWD/infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine caddy fmt --diff /etc/caddy/Caddyfile)
+          if printf '%s' "$difference" | grep -qE '^[-+]'; then
+            echo "::error::Caddyfile mal formate. Lancer : caddy fmt --overwrite infra/caddy/Caddyfile"
+            printf '%s\n' "$difference"
+            exit 1
+          fi
+
+      - name: La table de planification est valide
+        # Meme version et meme empreinte que dans infra/docker/etl.Dockerfile : si
+        # l'une bouge sans l'autre, cette etape le dit.
+        env:
+          VERSION: '0.2.51'
+          EMPREINTE: cc232108374e8e2b537045f2d5eaa1229f619db314c3ba6a14d38b35dc0aa123
+        run: |
+          set -eu
+          grep -q "SUPERCRONIC_VERSION=$VERSION" infra/docker/etl.Dockerfile
+          grep -q "$EMPREINTE" infra/docker/etl.Dockerfile
+          curl -fsSL -o supercronic \
+            "https://github.com/aptible/supercronic/releases/download/v$VERSION/supercronic-linux-amd64"
+          echo "$EMPREINTE  supercronic" | sha256sum -c -
+          chmod +x supercronic
+          ./supercronic -test infra/cron/carburant.cron
+
   pre-commit:
     name: pre-commit
     runs-on: ubuntu-latest

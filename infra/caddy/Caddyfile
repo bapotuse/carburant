@@ -1,0 +1,71 @@
+# Caddy, reverse proxy partage du VPS.
+#
+# Un bloc par site : le VPS hebergera d'autres projets de Baptiste, et ce fichier
+# est concu pour en accueillir d'autres sans etre reecrit.
+#
+# `{$CARBURANT_DOMAINE}` vient de l'environnement. Avec un vrai nom de domaine,
+# Caddy obtient et renouvelle le certificat tout seul. Avec `:80`, il sert en clair,
+# ce qui est le mode utilise pour l'essai local de cette configuration.
+{
+	# Pas d'API d'administration : une surface de moins sur une machine exposee.
+	admin off
+	# Pas de directive `email` ici. Caddy ouvre tres bien un compte ACME sans
+	# adresse ; il renouvelle les certificats tout seul, et l'avis d'expiration ne
+	# sert donc a rien. Une `email` vide, elle, empeche Caddy de demarrer : le
+	# defaut d'un placeholder ne s'applique qu'a une variable absente, pas a une
+	# variable vide, et Compose en fournit toujours une. Constate le 24/11/2026.
+}
+
+{$CARBURANT_DOMAINE::80} {
+	encode zstd gzip
+
+	header {
+		# HSTS : seulement quand on sert vraiment en HTTPS. Caddy n'envoie pas
+		# cet en-tete sur une connexion en clair, donc le laisser ici est sans
+		# danger pour l'essai local.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# La geolocalisation est le seul capteur dont le site se sert, et
+		# uniquement au clic sur « Ma position ».
+		Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
+		# Pas de `Content-Security-Policy` ici : elle depend de la route.
+		#   - le site se la pose lui-meme, avec un nonce par requete
+		#     (web/server/plugins/csp.ts) ; une politique posee ici bloquerait les
+		#     scripts en ligne de Nuxt et le site resterait inerte ;
+		#   - l'API a la sienne, plus bas, taillee pour Swagger UI.
+		# Deux en-tetes CSP sur une meme reponse ne s'additionnent pas : le
+		# navigateur applique l'intersection, et tout casse.
+		# Caddy annonce sa presence par defaut ; inutile de le dire.
+		-Server
+	}
+
+	# L'API, sa documentation et son schema. Tout le reste va au site.
+	# Le schema est servi sous le prefixe de version (`/v1/openapi.json`), pas a la
+	# racine : verifie le 24/11/2026, `/openapi.json` repond 404. ReDoc n'est pas
+	# active sur cette API, il n'y a donc pas de `/redoc` a router.
+	@api path /v1/* /docs /docs/*
+	handle @api {
+		# Swagger UI charge son script, sa feuille de style et sa police depuis
+		# jsdelivr, et son favicon depuis fastapi.tiangolo.com. Verifie le
+		# 24/11/2026 en lisant le HTML servi par /docs : une politique
+		# `default-src 'self'` laisse une page blanche.
+		header Content-Security-Policy "default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+		reverse_proxy api:8000
+	}
+
+	# `/mcp` arrivera au Jalon 4, avec le transport Streamable HTTP.
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	# Pas de `Cache-Control` ajoute pour /_nuxt/* : Nitro envoie deja
+	# `public, max-age=31536000, immutable` sur ses fichiers versionnes (verifie le
+	# 24/11/2026). Le redeclarer ici produisait un en-tete en double.
+
+	log {
+		output stdout
+		format json
+	}
+}
