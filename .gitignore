@@ -44,3 +44,7 @@ web/tests/**/*-snapshots/
 
 # certificats d'autorite locaux (voir infra/docker/ca/README.md)
 infra/docker/ca/*.crt
+
+# Sorties de travail de Playwright (contextes d'erreur, traces) : les captures
+# elles-memes sont versionnees, pas ce dossier.
+docs/captures/.playwright/

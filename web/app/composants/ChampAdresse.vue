@@ -30,7 +30,8 @@ const LONGUEUR_MINIMALE = 3
 const texte = ref('')
 const candidats = ref<Candidat[]>([])
 const ambigu = ref(false)
-const raison = ref<string | null>(null)
+/** Le géocodeur a répondu, et n'a rien trouvé. Sans cela, l'écran reste muet. */
+const vide = ref(false)
 const cherche = ref(false)
 const localise = ref(false)
 const identifiant = useId()
@@ -47,7 +48,10 @@ async function interroger(valeur: string): Promise<void> {
     if (requete !== derniereRequete) return
     candidats.value = resultat.candidats
     ambigu.value = resultat.ambigu
-    raison.value = resultat.raison ?? null
+    vide.value = resultat.candidats.length === 0
+    // `resultat.raison` est volontairement ignorée : elle est écrite pour l'API et
+    // pour le serveur MCP (« le meilleur candidat ne marque que 0,608 »), pas pour
+    // quelqu'un qui cherche une station. Un score n'explique rien à personne.
   } catch (erreur) {
     if (requete !== derniereRequete) return
     candidats.value = []
@@ -68,7 +72,7 @@ watch(texte, (valeur) => {
   if (propre.length < LONGUEUR_MINIMALE) {
     candidats.value = []
     ambigu.value = false
-    raison.value = null
+    vide.value = false
     return
   }
   minuteur = setTimeout(() => void interroger(propre), ANTI_REBOND_MS)
@@ -80,6 +84,7 @@ function choisir(candidat: Candidat): void {
   texte.value = candidat.libelle
   candidats.value = []
   ambigu.value = false
+  vide.value = false
   emit('choisi', {
     latitude: candidat.latitude,
     longitude: candidat.longitude,
@@ -105,10 +110,11 @@ function maPosition(): void {
       localise.value = false
       texte.value = 'Ma position'
       candidats.value = []
+      vide.value = false
       emit('choisi', {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
-        libelle: 'votre position',
+        libelle: 'Votre position',
       })
     },
     (erreur) => {
@@ -130,8 +136,8 @@ function maPosition(): void {
     <!-- Les suggestions sont au-dessus du champ : le champ est en bas de l'écran,
          dans la zone du pouce, et une liste qui descendrait sortirait de l'écran. -->
     <ul v-if="candidats.length" id="suggestions" class="suggestions" role="listbox">
-      <li v-if="ambigu && raison" class="suggestions__note" role="presentation">
-        Plusieurs lieux possibles&nbsp;: {{ raison }}. Choisissez&nbsp;:
+      <li v-if="ambigu" class="suggestions__note" role="presentation">
+        Plusieurs lieux portent ce nom. Choisissez&nbsp;:
       </li>
       <li
         v-for="candidat in candidats"
@@ -170,6 +176,9 @@ function maPosition(): void {
     </form>
 
     <p v-if="cherche" class="recherche__etat" aria-live="polite">Recherche…</p>
+    <p v-else-if="vide" class="recherche__etat" aria-live="polite">
+      Aucun lieu trouvé pour «&nbsp;{{ texte.trim() }}&nbsp;». Essayez une ville ou un code postal.
+    </p>
   </div>
 </template>
 
@@ -194,6 +203,19 @@ function maPosition(): void {
   color: var(--encre);
   border: 1px solid var(--bordure);
   border-radius: var(--rayon-champ);
+}
+
+/* La croix d'effacement native de `type="search"` est bleue dans Chrome et grise
+   dans Safari : dans les deux cas, hors palette. On la redessine à l'encre du
+   site, en gardant le contrôle natif plutôt qu'un bouton de plus. */
+.recherche__champ::-webkit-search-cancel-button {
+  appearance: none;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  background-color: var(--encre-2);
+  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M3 3 L13 13 M13 3 L3 13" stroke="black" stroke-width="2" fill="none" stroke-linecap="round"/></svg>')
+    center / contain no-repeat;
+  cursor: pointer;
 }
 
 .recherche__position {

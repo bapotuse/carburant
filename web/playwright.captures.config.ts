@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { defineConfig, devices } from '@playwright/test'
 
 /**
@@ -12,6 +13,10 @@ import { defineConfig, devices } from '@playwright/test'
  */
 const JALON = process.env.JALON ?? 'J0'
 
+const CHROMIUM_DE_L_IMAGE = '/opt/pw-browsers/chromium'
+const chromiumDeLImage =
+  process.env.PW_CHROMIUM ?? (existsSync(CHROMIUM_DE_L_IMAGE) ? CHROMIUM_DE_L_IMAGE : undefined)
+
 export default defineConfig({
   testDir: './tests/captures',
   outputDir: '../docs/captures/.playwright',
@@ -22,11 +27,19 @@ export default defineConfig({
 
   use: {
     baseURL: process.env.BASE_URL ?? 'http://127.0.0.1:3000',
-    // `PW_CHROMIUM` permet d'utiliser un Chromium deja present dans l'image
-    // (conteneurs, CI) plutot que d'en telecharger un. Non defini, Playwright
-    // utilise le sien, ce qui est le cas sur une machine de developpement.
-    launchOptions: process.env.PW_CHROMIUM
-      ? { executablePath: process.env.PW_CHROMIUM, args: ['--no-sandbox'] }
+    // Quel Chromium lancer.
+    //
+    // Playwright n'accepte que le numero de build qu'il a lui-meme epingle : avec
+    // 1.65.1 il reclame `chromium_headless_shell-1255`. L'image de developpement de
+    // cet environnement fournit le build 1243, et le telechargement y est coupe
+    // (`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD`). Sans cette ligne, chaque test echoue sur
+    // « Executable doesn't exist ».
+    //
+    // On lui designe donc le binaire present : `PW_CHROMIUM` s'il est fourni, sinon
+    // celui de l'image s'il existe. Sur une machine de developpement ordinaire,
+    // aucun des deux n'existe et Playwright utilise le sien, comme prevu.
+    launchOptions: chromiumDeLImage
+      ? { executablePath: chromiumDeLImage, args: ['--no-sandbox'] }
       : undefined,
     // Les captures sont regardees par un humain : deux fois la densite.
     deviceScaleFactor: 2,
@@ -41,9 +54,21 @@ export default defineConfig({
     : {
         command: 'node .output/server/index.mjs',
         url: 'http://127.0.0.1:3000',
-        reuseExistingServer: !process.env.CI,
+        // Jamais de réutilisation. `make captures` reconstruit `.output` juste avant,
+        // et un serveur déjà lancé sert l'ancienne version : les captures montrent
+        // alors un site qui n'existe plus, et les tests échouent sur du code corrigé.
+        // Mesuré : c'est exactement ce qui est arrivé le 24/11/2026.
+        // Pour viser un serveur lancé à la main, passer `BASE_URL`.
+        reuseExistingServer: false,
         timeout: 60_000,
-        env: { NITRO_PORT: '3000', NITRO_HOST: '127.0.0.1' },
+        env: {
+          NITRO_PORT: '3000',
+          NITRO_HOST: '127.0.0.1',
+          // Le rendu serveur et le navigateur ne joignent pas l'API par la meme
+          // adresse en production ; en local les deux valent 127.0.0.1:8000.
+          NUXT_API_BASE_INTERNE: process.env.NUXT_API_BASE_INTERNE ?? 'http://127.0.0.1:8000',
+          NUXT_PUBLIC_API_BASE: process.env.NUXT_PUBLIC_API_BASE ?? 'http://127.0.0.1:8000',
+        },
       },
 
   projects: [

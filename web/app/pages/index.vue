@@ -30,7 +30,10 @@ const CARBURANTS = [
   { code: 'gplc', libelle: 'GPLc' },
 ] as const
 
-const carburant = ref<string>('gazole')
+/** Les six codes de carburant, dérivés de la table ci-dessus : une seule source. */
+type CodeCarburant = (typeof CARBURANTS)[number]['code']
+
+const carburant = ref<CodeCarburant>('gazole')
 const lieu = ref<Lieu | null>(null)
 const resultat = ref<StationsProches | null>(null)
 const charge = ref(false)
@@ -137,21 +140,23 @@ useHead({
       <section v-else-if="stations.length === 0" class="message">
         <h1>Aucune station à moins de 10&nbsp;km</h1>
         <p>
-          Aucune station ne vend du
-          {{ CARBURANTS.find((c) => c.code === carburant)?.libelle }} près de {{ lieu?.libelle }},
-          ou leurs prix datent de plus d'un mois.
+          <PastilleCarburant :code="carburant" /> — aucune station de ce secteur ne vend ce
+          carburant, ou son dernier prix date de plus d'un mois.
         </p>
         <p class="message__piste">Essayez un autre carburant, ou un autre lieu.</p>
       </section>
 
       <section v-else class="liste">
-        <h1 class="liste__titre">
-          {{ CARBURANTS.find((c) => c.code === carburant)?.libelle }} près de
-          {{ lieu?.libelle }}
-        </h1>
+        <!-- Le lieu seul en titre, et le carburant porté par sa pastille.
+             « Gazole près de Avenue du prado » n'est pas du français, et aucune
+             règle d'élision ne tient sur des libellés venus du géocodeur. -->
+        <h1 class="liste__titre">{{ lieu?.libelle }}</h1>
         <p class="liste__compte">
-          {{ stations.length }} station{{ stations.length > 1 ? 's' : '' }}, de la moins chère à la
-          plus chère
+          <PastilleCarburant :code="carburant" />
+          <span>
+            {{ stations.length }} station{{ stations.length > 1 ? 's' : '' }}, de la moins chère à
+            la plus chère
+          </span>
         </p>
         <ul class="liste__stations">
           <CarteStation
@@ -188,6 +193,9 @@ useHead({
   display: grid;
   /* La page occupe la hauteur visible : les résultats défilent, la barre reste. */
   grid-template-rows: 1fr auto;
+  /* `minmax(0, 1fr)` et non `auto` : une colonne `auto` est dimensionnée sur le
+     contenu le plus large, et un seul enfant trop large élargit toute la page. */
+  grid-template-columns: minmax(0, 1fr);
   min-block-size: 100dvh;
   max-inline-size: 40rem;
   margin-inline: auto;
@@ -195,7 +203,9 @@ useHead({
 
 .resultats {
   padding-block: var(--e-8) var(--e-6);
-  overflow-y: auto;
+  /* Pas d'`overflow-y: auto` ici : la page défile en entier, barre comprise, et
+     un conteneur de défilement rognerait le filet de la station la moins chère,
+     qui déborde volontairement dans la gouttière. Mesuré : il disparaissait. */
 }
 
 /* ------------------------------------------------------------ état initial */
@@ -278,6 +288,10 @@ useHead({
 }
 
 .liste__compte {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
   margin-block: var(--e-2) var(--e-4);
   font-size: var(--t-s);
   color: var(--encre-2);
@@ -314,6 +328,12 @@ useHead({
   border: 0;
   padding: 0;
   margin: 0;
+  /* Mesuré : sans cette ligne, l'accueil déborde de 191 px à 375 px de large.
+     Les navigateurs appliquent `min-inline-size: min-content` aux `fieldset`, et
+     la largeur minimale d'une rangée flex non rétrécissable est la somme de ses
+     six pastilles — 550 px. Cette règle UA l'emporte sur le fait qu'`overflow-x`
+     fasse de la boîte un conteneur de défilement. */
+  min-inline-size: 0;
   /* Le doigt fait défiler les carburants sans que la page bouge. */
   scrollbar-width: none;
   overscroll-behavior-x: contain;
@@ -327,6 +347,11 @@ useHead({
   flex: none;
   display: inline-flex;
   align-items: center;
+  /* Bloc conteneur du bouton radio masqué. Sans cela, son ancêtre positionné est
+     `.commandes` (`position: sticky`) : le radio échappe au conteneur de
+     défilement des carburants et sa position se compte dans le débordement de la
+     page. Mesuré : 125 px de défilement horizontal sur un écran de 375 px. */
+  position: relative;
   min-block-size: var(--cible-min);
   padding-inline: var(--e-3);
   border: 1px solid var(--bordure);
@@ -340,6 +365,9 @@ useHead({
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
+  /* `base.css` impose 44 px de haut à tout `input` : ici c'est l'étiquette qui
+     porte la cible tactile, et le radio doit vraiment faire 1 px. */
+  min-block-size: 0;
   overflow: hidden;
   clip-path: inset(50%);
 }

@@ -332,6 +332,16 @@ const exempleTicket = {
   font-size: var(--t-s);
 }
 
+/* Mesuré : « Paire A » fait 42,75 px de large à cette taille de texte. La règle
+   de base garantit 44 px de haut à tout lien, pas de large : il faut l'écrire. */
+.planche__liens a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--cible-min);
+  padding-inline: var(--e-2);
+}
+
 section {
   display: grid;
   gap: var(--e-4);

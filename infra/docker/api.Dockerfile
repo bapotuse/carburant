@@ -45,7 +45,19 @@ RUN useradd --system --uid 10002 carburant
 USER carburant
 
 EXPOSE 8000
+
+# Le healthcheck interroge /v1/meta, pas /v1/sante, et la distinction compte.
+#
+#   /v1/meta  repond « ce conteneur sait servir » : l'application tourne et la base
+#             repond. C'est une question a laquelle un redemarrage peut repondre.
+#   /v1/sante repond « le service est en bon etat », donnees comprises : il renvoie
+#             503 quand la derniere collecte reussie est trop vieille. C'est la
+#             question que pose la supervision, et un redemarrage n'y changerait rien.
+#
+# Les confondre ferait echouer `docker compose up --wait` sur une pile parfaitement
+# fonctionnelle dont les donnees ont vieilli, et pousserait Docker a redemarrer un
+# conteneur qui va bien. Constate le 24/11/2026.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/sante', timeout=4).status == 200 else 1)"
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/meta', timeout=4).status == 200 else 1)"
 
 CMD ["uvicorn", "carburant_api.app:app", "--host", "0.0.0.0", "--port", "8000"]
