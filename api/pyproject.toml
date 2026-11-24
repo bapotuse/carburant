@@ -19,3 +19,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/carburant_api"]
+# `py.typed` declare que le paquet est type : sans ce marqueur, mypy refuse
+# d'utiliser ses annotations depuis un autre paquet du workspace (PEP 561).
+artifacts = ["src/*/py.typed"]

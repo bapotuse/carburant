@@ -49,6 +49,10 @@ services:
     env_file: [.env]
     volumes:
       - donnees_brutes:/app/data/raw
+      # Les migrations sont montees en developpement : en ajouter une ne doit pas
+      # imposer de reconstruire l'image. En production, c'est l'image qui les porte,
+      # puisqu'un deploiement livre de toute facon une nouvelle image.
+      - ./infra/migrations:/app/infra/migrations:ro
     depends_on:
       db: {condition: service_healthy}
     restart: unless-stopped

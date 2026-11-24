@@ -1,12 +1,11 @@
 # Avancement
 
 ## Prochaine action
-**J1-4** : l'API — `/v1/stations/proches` et `/v1/geocode` (proxy Géoplateforme avec
-cache, règle d'ambiguïté `score < 0,80 ou écart < 0,05`).
+**J1-5** : l'accueil mobile — champ d'adresse avec anti-rebond, bouton « Ma position »,
+liste triée par prix, prix façon totem, dans le style de la planche.
 
-La requête de fond est déjà écrite et mesurée : `ST_DWithin` 10 km + dernier prix par
-station via `LATERAL`, **11 ms** sur les vraies données. Reste à l'habiller en
-endpoint, avec pagination, `Cache-Control`, `ETag` et erreurs `problem+json`.
+L'API est prête et mesurée : `/v1/stations/proches` répond en **18,7 ms au p95** sur
+200 requêtes réparties dans dix villes de France (cible : 300 ms).
 
 J1-1 (téléchargement) et J1-2 (staging) sont faits et vérifiés sur les vraies données.
 Ce qui suit, dans l'ordre :
@@ -14,8 +13,8 @@ Ce qui suit, dans l'ordre :
 1. ~~**J1-2** `staging`~~ ✅ fait le 24/11/2026.
 2. ~~**J1-3** `marts`~~ ✅ fait le 24/11/2026 — idempotence prouvée sur les vraies
    données : au second passage, **0 prix inséré, 33 153 déjà connus**.
-3. **J1-4** API : `/v1/stations/proches`, `/v1/geocode` (proxy Géoplateforme avec cache
-   et la règle d'ambiguïté `score < 0,80 ou écart < 0,05`).
+3. ~~**J1-4** API~~ ✅ fait le 24/11/2026 — `/v1/stations/proches`, `/v1/geocode`,
+   `/v1/meta`, erreurs `problem+json`, `ETag` et `Cache-Control`. p95 **18,7 ms**.
 4. **J1-5** Web : accueil mobile, champ d'adresse avec anti-rebond, « Ma position »,
    liste triée par prix, prix façon totem.
 5. **J1-6** Déploiement : workflow GitHub Actions (images GHCR + ssh depuis le runner),
@@ -168,6 +167,27 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-24 — Jalon 1, étape 4 : l'API.** `/v1/stations/proches` (tri par prix ou
+  distance, filtre carburant, pagination), `/v1/geocode` (proxy Géoplateforme, cache
+  24 h, limitation de débit sortante, **règle d'ambiguïté**), `/v1/meta`, erreurs
+  `application/problem+json`, `ETag` et `Cache-Control`.
+  **Mesuré sur les vraies données** : p95 **18,7 ms** sur 200 requêtes dans dix villes
+  de France, médiane 10,4 ms, max 65,5 ms. Cible : 300 ms.
+  La règle d'ambiguïté du géocodage est **vérifiée contre le vrai service IGN** : les
+  quatre verdicts de la reconnaissance tiennent toujours.
+  **Défaut grave trouvé en regardant `/v1/meta`** : il annonçait qu'aucune collecte
+  n'avait jamais réussi alors que les données étaient bien chargées. Cause — en mode
+  non-autocommit, psycopg ouvre une transaction dès le premier `SELECT` ; le contrôle
+  de la partition DEFAULT, placé entre le chargement et la clôture de l'exécution,
+  transformait les blocs suivants en simples points de reprise, et le `close()`
+  annulait la clôture. Corrigé en `autocommit=True` avec transactions explicites, et
+  verrouillé par un test de non-régression.
+  Deux autres défauts trouvés par des tests : `count(DISTINCT …) OVER ()` n'existe pas
+  dans PostgreSQL, et comparer deux scores de géocodage en flottants bruts bascule du
+  mauvais côté de la borne (`0,95 − 0,90` vaut `0,04999…`).
+  **326 tests** : 172 unitaires Python, 109 front, 39 d'intégration, 6 contre les
+  vraies sources.
 
 - **2026-11-24 — Jalon 1, étape 3 : le modèle d'exposition.** `marts.dim_station`
   (geography + index GiST, autoroute dérivée de `pop`, SCD de type 1),

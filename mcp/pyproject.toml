@@ -27,3 +27,6 @@ build-backend = "hatchling.build"
 # masquerait le SDK `mcp`. Pas de __init__.py a la racine de mcp/.
 [tool.hatch.build.targets.wheel]
 packages = ["src/carburant_mcp"]
+# `py.typed` declare que le paquet est type : sans ce marqueur, mypy refuse
+# d'utiliser ses annotations depuis un autre paquet du workspace (PEP 561).
+artifacts = ["src/*/py.typed"]

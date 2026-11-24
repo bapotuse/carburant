@@ -11,12 +11,18 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from carburant_api import erreurs
 from carburant_api.requetes.connexion import creer_pool
-from carburant_api.routes import sante
+from carburant_api.routes import geocode, meta, sante, stations
 from carburant_api.version import DESCRIPTION, PREFIXE, TITRE, VERSION
+
+DELAI_AMONT = httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=10.0)
+"""Timeouts vers les services amont. Courts : une page qui attend 30 secondes un
+geocodeur en panne est pire qu'une page qui dit franchement qu'il ne repond pas."""
 
 
 def origines_autorisees() -> list[str]:
@@ -37,10 +43,18 @@ async def cycle_de_vie(app: FastAPI) -> AsyncIterator[None]:
     reponse, et permet a la sonde de le voir.
     """
     app.state.pool = creer_pool()
+    # Un seul client HTTP pour tout le processus : etablir une connexion TLS a chaque
+    # geocodage couterait plus cher que le geocodage lui-meme.
+    app.state.client_http = httpx.AsyncClient(
+        timeout=DELAI_AMONT,
+        follow_redirects=True,
+        headers={"User-Agent": f"carburant-api/{VERSION} (+https://github.com/bapotuse/carburant)"},
+    )
     try:
         await app.state.pool.open(wait=False)
         yield
     finally:
+        await app.state.client_http.aclose()
         await app.state.pool.close()
 
 
@@ -61,7 +75,11 @@ def creer_app() -> FastAPI:
         allow_methods=["GET"],
         allow_headers=["Content-Type"],
     )
+    erreurs.enregistrer(app)
     app.include_router(sante.routeur, prefix=PREFIXE)
+    app.include_router(meta.routeur, prefix=PREFIXE)
+    app.include_router(geocode.routeur, prefix=PREFIXE)
+    app.include_router(stations.routeur, prefix=PREFIXE)
     return app
 
 

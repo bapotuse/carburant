@@ -96,7 +96,11 @@ def appliquer(database_url: str, repertoire: Path | None = None) -> list[str]:
         )
 
     appliquees: list[str] = []
-    with psycopg.connect(database_url, autocommit=False) as connexion:
+    # autocommit : sans lui, la lecture de `meta.migration` ouvrirait une
+    # transaction implicite, et les `with connexion.transaction()` suivants ne
+    # seraient que des points de reprise -- ce qui rendrait l'application de N
+    # migrations tout-ou-rien, contrairement a ce qui est annonce plus bas.
+    with psycopg.connect(database_url, autocommit=True) as connexion:
         connues = _deja_appliquees(connexion)
 
         for migration in migrations:

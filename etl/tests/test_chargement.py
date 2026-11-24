@@ -286,3 +286,39 @@ def test_la_purge_ne_garde_que_les_dernieres_collectes(base: str) -> None:
     assert collectes == (2,)
     # Le ON DELETE CASCADE a bien emporte les lignes de staging.
     assert prix == (4,), "2 collectes x 2 lignes de prix"
+
+
+@sans_base
+def test_une_lecture_n_empeche_pas_la_cloture_d_execution(base: str) -> None:
+    """Regression : une transaction implicite avalait la cloture de l'execution.
+
+    En mode non-autocommit, psycopg ouvre une transaction des le premier ordre, y
+    compris un `SELECT`. Les `with connexion.transaction()` suivants ne sont alors que
+    des points de reprise imbriques : ils ne valident rien, et `close()` annule tout.
+
+    Le defaut etait silencieux et grave : un controle qualite en lecture, place entre
+    le chargement et la cloture, laissait `meta.execution_etl` bloque sur `en_cours`.
+    `/v1/sante` et `/v1/meta` annoncaient donc qu'aucune collecte n'avait jamais
+    reussi, alors que les donnees etaient bien chargees.
+    """
+    from carburant_etl.pipeline import cloturer_execution, demarrer_execution
+
+    with ouvrir(base) as connexion:
+        execution_id = demarrer_execution(connexion, "test")
+        # La lecture qui declenchait le defaut.
+        connexion.execute("SELECT count(*) FROM marts.fact_prix").fetchone()
+        cloturer_execution(connexion, execution_id, statut="succes", lignes_par_etape={"load": 1})
+
+    # Nouvelle connexion : on lit ce qui a reellement ete valide.
+    with ouvrir(base) as verification:
+        curseur = verification.execute(
+            "SELECT statut, fin IS NOT NULL, lignes_par_etape "
+            "FROM meta.execution_etl WHERE id = %s",
+            (execution_id,),
+        )
+        ligne = curseur.fetchone()
+
+    assert ligne is not None
+    assert ligne[0] == "succes", "l'execution doit etre cloturee, pas restee en cours"
+    assert ligne[1] is True, "la date de fin doit etre enregistree"
+    assert ligne[2] == {"load": 1}

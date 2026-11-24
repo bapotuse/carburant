@@ -36,8 +36,23 @@ COLONNES_REJET: Final = "collecte_id, champ, motif, occurrences, exemple"
 
 
 def ouvrir(database_url: str) -> psycopg.Connection[tuple[object, ...]]:
-    """Ouvre une connexion. `autocommit=False` : le chargement est transactionnel."""
-    return psycopg.connect(database_url, autocommit=False)
+    """Ouvre une connexion en **autocommit**, avec des transactions explicites.
+
+    `autocommit=True` n'a rien de laxiste ici : c'est ce qui rend les transactions
+    previsibles. En mode non-autocommit, psycopg ouvre une transaction implicite des
+    le premier ordre -- y compris un simple `SELECT`. Tous les
+    `with connexion.transaction()` qui suivent ne sont alors que des points de
+    reprise imbriques : ils ne valident rien, et un `close()` annule tout.
+
+    Le defaut etait reel et silencieux : un controle qualite en lecture, place entre
+    le chargement et la cloture de l'execution, laissait `meta.execution_etl` bloque
+    sur `en_cours` pour toujours -- donc `/v1/sante` et `/v1/meta` annoncaient qu'il
+    n'y avait jamais eu de collecte reussie, alors que les donnees etaient bien la.
+
+    En autocommit, une lecture n'ouvre rien, et chaque `with connexion.transaction()`
+    est une vraie transaction, validee a la sortie du bloc.
+    """
+    return psycopg.connect(database_url, autocommit=True)
 
 
 def enregistrer_collecte(
