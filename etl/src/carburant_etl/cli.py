@@ -93,6 +93,17 @@ def _run(rejouer: Path | None) -> int:
         f"collecte #{resultat.collecte_id} : {resultat.stations} stations, "
         f"{resultat.prix} lignes de prix, {resultat.rejets} rejets."
     )
+    if resultat.marts is not None:
+        m = resultat.marts
+        print(
+            f"marts : {m.stations_inserees} station(s) nouvelle(s), "
+            f"{m.stations_mises_a_jour} mise(s) a jour, "
+            f"{m.stations_desactivees} desactivee(s) ; "
+            f"{m.prix_inseres} changement(s) de prix nouveau(x), "
+            f"{m.prix_revus} deja connu(s) ; {m.ruptures} rupture(s)."
+        )
+        if m.partitions_creees:
+            print(f"partitions creees : {', '.join(m.partitions_creees)}")
     if resultat.fichiers_purges or resultat.collectes_purgees:
         print(
             f"purge : {resultat.fichiers_purges} fichier(s) brut(s), "

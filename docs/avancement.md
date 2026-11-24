@@ -1,19 +1,19 @@
 # Avancement
 
 ## Prochaine action
-**J1-3** : `marts.dim_station` et `marts.fact_prix`, grain = un changement de prix,
-idempotent. Attention aux bornes de partition **en UTC** et à la partition du mois
-précédent (`docs/reconnaissance.md` § 2.5).
+**J1-4** : l'API — `/v1/stations/proches` et `/v1/geocode` (proxy Géoplateforme avec
+cache, règle d'ambiguïté `score < 0,80 ou écart < 0,05`).
+
+La requête de fond est déjà écrite et mesurée : `ST_DWithin` 10 km + dernier prix par
+station via `LATERAL`, **11 ms** sur les vraies données. Reste à l'habiller en
+endpoint, avec pagination, `Cache-Control`, `ETag` et erreurs `problem+json`.
 
 J1-1 (téléchargement) et J1-2 (staging) sont faits et vérifiés sur les vraies données.
 Ce qui suit, dans l'ordre :
 
 1. ~~**J1-2** `staging`~~ ✅ fait le 24/11/2026.
-2. **J1-3** `marts` : `dim_station` (geography + GiST, département pris du flux) et
-   `fact_prix` partitionné par mois, grain = un changement de prix, idempotent.
-   Attention aux bornes de partition **en UTC** et à la partition du mois précédent.
-   C'est ici que se joue le critère de sortie « deux exécutions successives ne créent
-   aucun doublon ».
+2. ~~**J1-3** `marts`~~ ✅ fait le 24/11/2026 — idempotence prouvée sur les vraies
+   données : au second passage, **0 prix inséré, 33 153 déjà connus**.
 3. **J1-4** API : `/v1/stations/proches`, `/v1/geocode` (proxy Géoplateforme avec cache
    et la règle d'ambiguïté `score < 0,80 ou écart < 0,05`).
 4. **J1-5** Web : accueil mobile, champ d'adresse avec anti-rebond, « Ma position »,
@@ -168,6 +168,25 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-24 — Jalon 1, étape 3 : le modèle d'exposition.** `marts.dim_station`
+  (geography + index GiST, autoroute dérivée de `pop`, SCD de type 1),
+  `marts.fact_prix` partitionnée par mois avec le grain « un changement de prix »,
+  `marts.rupture` pour l'état courant, `marts.dim_carburant`.
+  **Critère de sortie du jalon atteint** : deux exécutions successives sur les vraies
+  données donnent **0 prix inséré et 33 153 déjà connus** au second passage, et
+  9 825 stations mises à jour en place. Partition DEFAULT : **0 ligne**.
+  Chargé en vrai : 9 825 stations, 33 153 changements de prix, 22 186 ruptures,
+  **15 partitions** de juillet 2025 à décembre 2026.
+  Requête « stations proches » mesurée à **11 ms** : les cinq gazoles les moins chers
+  autour du Prado sortent avec leur adresse, leur prix et l'heure de mise à jour.
+  **Écart avec la spec corrigé** : « partitions du mois courant et du suivant » était
+  insuffisant — `maj` est une date de changement qui remonte à plus d'un an, et deux
+  mois de partitions auraient mis plus de mille lignes dans la partition DEFAULT.
+  **Défauts trouvés par les tests** : PostgreSQL refuse les paramètres liés dans du
+  DDL, et refuse `RETURNING (xmax = 0)` dans une CTE. Deux de mes tests étaient faux
+  (deux prix du même carburant dans une seule collecte, ce que le flux ne produit
+  jamais) : corrigés, pas désactivés.
 
 - **2026-11-24 — Jalon 1, étapes 1 et 2.** Téléchargement du flux (réessais, empreinte
   dans le nom de fichier, purge), validation pydantic à la frontière raw → staging,

@@ -22,6 +22,7 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
+from carburant_etl.chargement import marts
 from carburant_etl.chargement.staging import charger, ouvrir, purger_staging
 from carburant_etl.config import Config
 from carburant_etl.modeles import Aplatissement, aplatir
@@ -42,6 +43,7 @@ class Resultat:
     inchange: bool
     fichiers_purges: int
     collectes_purgees: int
+    marts: marts.ResultatMarts | None = None
 
 
 def demarrer_execution(connexion: psycopg.Connection[tuple[object, ...]], commande: str) -> int:
@@ -183,6 +185,16 @@ def executer(config: Config, *, rejouer: Path | None = None) -> Resultat:
 
             aplati = transformer(collecte)
             collecte_id = charger(connexion, collecte, aplati, execution_id=execution_id)
+            resultat_marts = marts.charger(connexion, collecte_id)
+
+            # La partition DEFAULT doit rester vide : une ligne dedans veut dire
+            # qu'une partition manquait au moment de l'insertion.
+            orphelines = marts.partition_defaut_vide(connexion)
+            if orphelines:
+                raise RuntimeError(
+                    f"{orphelines} ligne(s) dans la partition DEFAULT de fact_prix : "
+                    "une partition mensuelle manquait."
+                )
 
             fichiers = purger(config.repertoire_brut, retention_jours=config.retention_jours)
             collectes = purger_staging(connexion)
@@ -194,7 +206,13 @@ def executer(config: Config, *, rejouer: Path | None = None) -> Resultat:
                 lignes_par_etape={
                     "extract": aplati.lignes_lues,
                     "transform": len(aplati.prix),
-                    "load": len(aplati.prix),
+                    "load_staging": len(aplati.prix),
+                    "stations_inserees": resultat_marts.stations_inserees,
+                    "stations_mises_a_jour": resultat_marts.stations_mises_a_jour,
+                    "stations_desactivees": resultat_marts.stations_desactivees,
+                    "prix_nouveaux": resultat_marts.prix_inseres,
+                    "prix_revus": resultat_marts.prix_revus,
+                    "ruptures": resultat_marts.ruptures,
                     "rejets": aplati.rejets.total,
                 },
                 avertissements=[
@@ -211,6 +229,7 @@ def executer(config: Config, *, rejouer: Path | None = None) -> Resultat:
                 inchange=False,
                 fichiers_purges=fichiers,
                 collectes_purgees=collectes,
+                marts=resultat_marts,
             )
         except Exception as erreur:
             cloturer_execution(
