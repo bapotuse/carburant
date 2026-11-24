@@ -1,8 +1,34 @@
 # Avancement
 
 ## Prochaine action
-**J1-5** : l'accueil mobile — champ d'adresse avec anti-rebond, bouton « Ma position »,
-liste triée par prix, prix façon totem, dans le style de la planche.
+**J1-5, vérification.** L'accueil mobile est **écrit mais pas encore vu tourner** :
+`make check` est vert (lint, typage, 281 tests) et `pnpm build` passe, mais la page
+n'a jamais été rendue avec de vraies données, et aucune capture n'a été produite.
+Rien n'est donc coché.
+
+Reprendre exactement ici :
+
+1. `make up`, puis charger des données :
+   `docker compose run --rm -v /home/user/data/raw:/brut:ro etl etl run --rejouer /brut/<fichier>`
+   (ou `etl run` tout court si le réseau de la machine le permet).
+2. Ouvrir <http://localhost:3000>, chercher « le Prado, Marseille », vérifier que la
+   liste sort avec les prix, les dates et les distances.
+3. Vérifier le CORS : le navigateur appelle l'API depuis `localhost:3000`, et
+   `API_ORIGINES_AUTORISEES` doit le couvrir.
+4. `make captures JALON=J1`, puis **ouvrir les captures** et les comparer à
+   `docs/anti-patterns-ia.md`.
+5. Parcours Playwright « chercher depuis un téléphone » (test obligatoire de
+   `CLAUDE.md`), et vérification des cibles ≥ 44 px sur l'accueil.
+
+Ce qui est déjà en place pour J1-5 : client TypeScript **généré** depuis l'OpenAPI
+(`pnpm generer-client`), `ChampAdresse` (anti-rebond 350 ms, « Ma position » au clic
+seulement, suggestions au-dessus du champ), `CarteStation`, `IndicateurFraicheur`,
+et l'accueil avec la zone du pouce en bas.
+
+**Point d'attention relevé pendant l'écriture** : le navigateur et le rendu serveur
+n'atteignent pas l'API par la même adresse dans la pile Docker. Deux bases ont été
+séparées (`apiBase` public, `apiBaseInterne` pour le SSR) — à vérifier justement à
+l'étape 2.
 
 L'API est prête et mesurée : `/v1/stations/proches` répond en **18,7 ms au p95** sur
 200 requêtes réparties dans dix villes de France (cible : 300 ms).

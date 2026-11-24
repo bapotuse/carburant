@@ -56,6 +56,11 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    // Adresse interne de l'API, utilisee par le rendu serveur. Dans la pile Docker
+    // le navigateur et le conteneur web ne joignent pas l'API par la meme adresse :
+    // le navigateur passe par `localhost` (ou le domaine public), le serveur par le
+    // nom de service du reseau Docker.
+    apiBaseInterne: process.env.NUXT_API_BASE_INTERNE ?? 'http://api:8000',
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE ?? 'http://localhost:8000',
     },

@@ -99,7 +99,9 @@ services:
     # Docker fournit l'init (reaper de zombies, propagation des signaux).
     init: true
     environment:
+      # Adresse vue par le navigateur, et adresse vue par le rendu serveur.
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-http://localhost:8000}
+      NUXT_API_BASE_INTERNE: http://api:8000
     ports: ["${WEB_PORT:-3000}:3000"]
     depends_on:
       api: {condition: service_healthy}

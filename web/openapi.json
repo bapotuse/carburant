@@ -1,0 +1,969 @@
+{
+  "components": {
+    "schemas": {
+      "Candidat": {
+        "description": "Un lieu propose par le geocodeur.",
+        "properties": {
+          "code_postal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "13006"
+            ],
+            "title": "Code Postal"
+          },
+          "latitude": {
+            "examples": [
+              43.283691
+            ],
+            "title": "Latitude",
+            "type": "number"
+          },
+          "libelle": {
+            "examples": [
+              "40 Avenue du prado 13006 Marseille"
+            ],
+            "title": "Libelle",
+            "type": "string"
+          },
+          "longitude": {
+            "examples": [
+              5.384595
+            ],
+            "title": "Longitude",
+            "type": "number"
+          },
+          "score": {
+            "examples": [
+              0.972
+            ],
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "type": {
+            "description": "`housenumber`, `street`, `municipality` ou `locality`.",
+            "examples": [
+              "housenumber"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "ville": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Marseille"
+            ],
+            "title": "Ville"
+          }
+        },
+        "required": [
+          "libelle",
+          "score",
+          "type",
+          "latitude",
+          "longitude"
+        ],
+        "title": "Candidat",
+        "type": "object"
+      },
+      "Fraicheur": {
+        "description": "Age d'un prix, en quatre classes.\n\n`maj` est la date du dernier **changement** de prix, pas du dernier controle :\nune station qui ne bouge pas ses prix pendant dix jours n'est pas fausse pour\nautant. Seuils mesures, voir `docs/reconnaissance.md` section 1.9.",
+        "enum": [
+          "frais",
+          "recent",
+          "ancien",
+          "perime"
+        ],
+        "title": "Fraicheur",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "PrixCarburant": {
+        "description": "Le prix d'un carburant dans une station, avec sa date et sa fraicheur.",
+        "properties": {
+          "carburant": {
+            "description": "Code normalise du carburant.",
+            "examples": [
+              "gazole"
+            ],
+            "title": "Carburant",
+            "type": "string"
+          },
+          "fraicheur": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Fraicheur"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`frais` (<= 48 h), `recent` (<= 7 j), `ancien` (<= 30 j, affiche avec un avertissement et exclu des classements), `perime` (> 30 j).",
+            "examples": [
+              "frais"
+            ]
+          },
+          "maj": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Instant du dernier **changement** de prix, en UTC. Jamais `null` quand `prix_eur_l` est renseigne : un prix sans date ne doit pas s'afficher.",
+            "examples": [
+              "2026-11-23T16:00:00Z"
+            ],
+            "title": "Maj"
+          },
+          "prix_eur_l": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Prix en euros par litre. `null` si le carburant est en rupture.",
+            "examples": [
+              1.879
+            ],
+            "title": "Prix Eur L"
+          },
+          "rupture": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Rupture"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Renseigne si le carburant est declare indisponible."
+          }
+        },
+        "required": [
+          "carburant"
+        ],
+        "title": "PrixCarburant",
+        "type": "object"
+      },
+      "ReponseGeocode": {
+        "description": "Resultat d'un geocodage, avec son verdict d'ambiguite.",
+        "properties": {
+          "ambigu": {
+            "description": "Vrai quand le meilleur score est sous 0,80, ou quand les deux premiers candidats sont separes de moins de 0,05. Dans ce cas il faut **demander de preciser** plutot que de choisir : « le Prado » peut designer deux avenues distantes de 1,2 km.",
+            "examples": [
+              true
+            ],
+            "title": "Ambigu",
+            "type": "boolean"
+          },
+          "candidats": {
+            "description": "Classes par score decroissant, le meilleur d'abord.",
+            "items": {
+              "$ref": "#/components/schemas/Candidat"
+            },
+            "title": "Candidats",
+            "type": "array"
+          },
+          "raison": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pourquoi la requete est jugee ambigue, en clair.",
+            "examples": [
+              "les deux premiers candidats sont separes de 0,013 point"
+            ],
+            "title": "Raison"
+          },
+          "requete": {
+            "description": "Le texte demande.",
+            "examples": [
+              "le Prado, Marseille"
+            ],
+            "title": "Requete",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requete",
+          "ambigu",
+          "candidats"
+        ],
+        "title": "ReponseGeocode",
+        "type": "object"
+      },
+      "ReponseMeta": {
+        "description": "Etat des donnees et des sources.",
+        "properties": {
+          "age_derniere_collecte_minutes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Age de cette collecte, en minutes.",
+            "examples": [
+              7
+            ],
+            "title": "Age Derniere Collecte Minutes"
+          },
+          "carburants": {
+            "description": "Les carburants publies par la source.",
+            "examples": [
+              [
+                "gazole",
+                "sp95",
+                "e10",
+                "sp98",
+                "e85",
+                "gplc"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Carburants",
+            "type": "array"
+          },
+          "couverture": {
+            "description": "Ce que les donnees couvrent, et ce qu'elles ne couvrent pas.",
+            "title": "Couverture",
+            "type": "string"
+          },
+          "derniere_collecte": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Instant de la derniere collecte reussie, en UTC.",
+            "examples": [
+              "2026-11-24T19:45:00Z"
+            ],
+            "title": "Derniere Collecte"
+          },
+          "prix_connus": {
+            "description": "Nombre de changements de prix historises. Le grain est le changement, pas la collecte : une station qui ne bouge pas son prix n'ajoute rien.",
+            "examples": [
+              33153
+            ],
+            "title": "Prix Connus",
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "stations_actives": {
+            "description": "Stations vues lors des dernieres collectes.",
+            "examples": [
+              9825
+            ],
+            "title": "Stations Actives",
+            "type": "integer"
+          },
+          "version": {
+            "examples": [
+              "0.1.0"
+            ],
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stations_actives",
+          "prix_connus",
+          "carburants",
+          "couverture",
+          "sources",
+          "version"
+        ],
+        "title": "ReponseMeta",
+        "type": "object"
+      },
+      "ReponseStationsProches": {
+        "description": "Resultat d'une recherche de stations autour d'un point.",
+        "properties": {
+          "carburant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Carburant demande, s'il y en avait un.",
+            "title": "Carburant"
+          },
+          "derniere_collecte": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Instant de la derniere collecte reussie. C'est la fraicheur de l'ensemble des donnees, a distinguer de celle de chaque prix.",
+            "title": "Derniere Collecte"
+          },
+          "rayon_km": {
+            "description": "Rayon effectivement applique.",
+            "examples": [
+              10.0
+            ],
+            "title": "Rayon Km",
+            "type": "number"
+          },
+          "stations": {
+            "items": {
+              "$ref": "#/components/schemas/StationProche"
+            },
+            "title": "Stations",
+            "type": "array"
+          },
+          "total": {
+            "description": "Nombre de stations trouvees avant pagination.",
+            "examples": [
+              57
+            ],
+            "title": "Total",
+            "type": "integer"
+          },
+          "tri": {
+            "description": "Critere de tri applique.",
+            "examples": [
+              "prix"
+            ],
+            "title": "Tri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stations",
+          "total",
+          "rayon_km",
+          "tri"
+        ],
+        "title": "ReponseStationsProches",
+        "type": "object"
+      },
+      "Rupture": {
+        "description": "Un carburant indisponible dans cette station.",
+        "properties": {
+          "debut": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Debut declare de la rupture, en UTC.",
+            "title": "Debut"
+          },
+          "type": {
+            "description": "`definitive` veut dire que la station ne vend pas ce carburant -- ce n'est pas une panne. C'est ainsi que la source declare une absence.",
+            "enum": [
+              "temporaire",
+              "definitive"
+            ],
+            "examples": [
+              "definitive"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Rupture",
+        "type": "object"
+      },
+      "Sante": {
+        "description": "Etat de sante du service.",
+        "properties": {
+          "age_derniere_collecte_minutes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Age de la derniere collecte **reussie**, en minutes. `null` si aucune collecte n'a encore abouti.",
+            "examples": [
+              7
+            ],
+            "title": "Age Derniere Collecte Minutes"
+          },
+          "age_max_minutes": {
+            "description": "Seuil au dela duquel le service se declare degrade.",
+            "examples": [
+              60
+            ],
+            "title": "Age Max Minutes",
+            "type": "integer"
+          },
+          "base_joignable": {
+            "description": "La base de donnees repond-elle ?",
+            "title": "Base Joignable",
+            "type": "boolean"
+          },
+          "schema_pret": {
+            "description": "Les migrations ont-elles ete appliquees ? Une base qui repond avec un schema absent n'est pas la meme panne qu'une base injoignable : la reparation est `make migrate`, pas un redemarrage.",
+            "title": "Schema Pret",
+            "type": "boolean"
+          },
+          "statut": {
+            "description": "`ok` si la base repond **et** que la derniere collecte reussie est plus recente que le seuil configure. `degrade` sinon, avec un code 503.",
+            "enum": [
+              "ok",
+              "degrade"
+            ],
+            "examples": [
+              "ok"
+            ],
+            "title": "Statut",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version de l'API.",
+            "examples": [
+              "0.1.0"
+            ],
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "statut",
+          "base_joignable",
+          "schema_pret",
+          "age_max_minutes",
+          "version"
+        ],
+        "title": "Sante",
+        "type": "object"
+      },
+      "Source": {
+        "description": "Une source de donnees, avec sa licence et son attribution.",
+        "properties": {
+          "attribution": {
+            "title": "Attribution",
+            "type": "string"
+          },
+          "licence": {
+            "title": "Licence",
+            "type": "string"
+          },
+          "nom": {
+            "title": "Nom",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nom",
+          "url",
+          "licence",
+          "attribution"
+        ],
+        "title": "Source",
+        "type": "object"
+      },
+      "StationProche": {
+        "description": "Une station trouvee autour d'un point.",
+        "properties": {
+          "adresse": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "32 boulevard Schloesing"
+            ],
+            "title": "Adresse"
+          },
+          "autoroute": {
+            "description": "Vrai si la station est sur autoroute. 4,4 % des stations.",
+            "examples": [
+              false
+            ],
+            "title": "Autoroute",
+            "type": "boolean"
+          },
+          "code_departement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "13"
+            ],
+            "title": "Code Departement"
+          },
+          "cp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "13010"
+            ],
+            "title": "Cp"
+          },
+          "departement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Bouches-du-Rhône"
+            ],
+            "title": "Departement"
+          },
+          "distance_km": {
+            "description": "Distance a vol d'oiseau depuis le point demande, en kilometres.",
+            "examples": [
+              1.3
+            ],
+            "minimum": 0.0,
+            "title": "Distance Km",
+            "type": "number"
+          },
+          "id": {
+            "description": "Identifiant officiel de la station.",
+            "examples": [
+              13008003
+            ],
+            "title": "Id",
+            "type": "integer"
+          },
+          "latitude": {
+            "examples": [
+              43.2726
+            ],
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "examples": [
+              5.3846
+            ],
+            "title": "Longitude",
+            "type": "number"
+          },
+          "prix": {
+            "description": "Les prix connus de cette station. Quand la recherche porte sur un carburant, la liste n'en contient qu'un.",
+            "items": {
+              "$ref": "#/components/schemas/PrixCarburant"
+            },
+            "title": "Prix",
+            "type": "array"
+          },
+          "ville": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Marseille"
+            ],
+            "title": "Ville"
+          }
+        },
+        "required": [
+          "id",
+          "autoroute",
+          "latitude",
+          "longitude",
+          "distance_km",
+          "prix"
+        ],
+        "title": "StationProche",
+        "type": "object"
+      },
+      "Tri": {
+        "enum": [
+          "prix",
+          "distance"
+        ],
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Prix des carburants en France, collectes toutes les 15 minutes depuis le flux ouvert\nde la DGCCRF, nettoyes et historises.\n\n**Toutes les unites sont dans les noms de champs** : `prix_eur_l`, `distance_km`,\n`co2_kg`. Un prix est toujours accompagne de sa date de mise a jour et de sa classe de\nfraicheur : la source publie la date du dernier *changement* de prix, pas celle du\ndernier controle.\n\nSources et licences : prix DGCCRF (Licence Ouverte 2.0), facteurs d'emission Base\nCarbone ADEME (Licence Ouverte), geocodage Geoplateforme IGN.\n",
+    "title": "API Carburant",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/geocode": {
+      "get": {
+        "description": "Transforme un texte libre en coordonnees, via la Geoplateforme IGN, en se limitant a la France.\n\n**Le champ `ambigu` est le plus important de la reponse.** Quand il vaut `true`, il ne faut pas choisir le premier candidat : il faut demander de preciser. « le Prado » a Marseille designe deux avenues distantes de 1,2 km dont les scores different de 0,009 point.\n\nLes resultats sont mis en cache 24 heures.",
+        "operationId": "geocode_v1_geocode_get",
+        "parameters": [
+          {
+            "description": "Adresse, lieu, ville ou code postal.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Adresse, lieu, ville ou code postal.",
+              "examples": [
+                "le Prado, Marseille"
+              ],
+              "maxLength": 200,
+              "minLength": 2,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Nombre maximal de candidats.",
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "description": "Nombre maximal de candidats.",
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Limite",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseGeocode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "description": "Le geocodeur de l'IGN n'a pas repondu (problem+json)."
+          }
+        },
+        "summary": "Geocoder une adresse ou un lieu",
+        "tags": [
+          "geocodage"
+        ]
+      }
+    },
+    "/v1/meta": {
+      "get": {
+        "description": "Derniere collecte, volumes, carburants publies, limites de couverture et attributions. C'est ici qu'on verifie que les donnees affichees sont fraiches, et d'ou elles viennent.",
+        "operationId": "meta_v1_meta_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseMeta"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Etat des donnees et des sources",
+        "tags": [
+          "service"
+        ]
+      }
+    },
+    "/v1/sante": {
+      "get": {
+        "description": "Renvoie 200 si la base repond et que la derniere collecte reussie est plus recente que le seuil configure, 503 sinon. Destine aux sondes de surveillance : la reponse n'est jamais mise en cache.",
+        "operationId": "sante_v1_sante_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sante"
+                }
+              }
+            },
+            "description": "Le service est operationnel."
+          },
+          "503": {
+            "description": "Base injoignable, ou donnees trop vieilles."
+          }
+        },
+        "summary": "Etat de sante du service",
+        "tags": [
+          "service"
+        ]
+      }
+    },
+    "/v1/stations/proches": {
+      "get": {
+        "description": "Renvoie les stations dans un rayon donne, triees par prix ou par distance.\n\n**Ce qui est ecarte** : les stations inactives, les carburants declares en rupture, et les prix perimes -- ceux dont le dernier changement remonte a plus de 30 jours. Les prix *anciens* (7 a 30 jours) sont **gardes** : les ecarter priverait l'utilisateur de stations qui existent et vendent au prix affiche. Chaque prix porte sa date et sa classe de fraicheur, a afficher.\n\nLa distance est a vol d'oiseau. Le trajet reel est plus long : `/v1/stations/meilleure` tiendra compte du detour.",
+        "operationId": "proches_v1_stations_proches_get",
+        "parameters": [
+          {
+            "description": "Latitude du point de depart, en degres decimaux.",
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "description": "Latitude du point de depart, en degres decimaux.",
+              "examples": [
+                43.2726
+              ],
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Longitude du point de depart, en degres decimaux.",
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "description": "Longitude du point de depart, en degres decimaux.",
+              "examples": [
+                5.3846
+              ],
+              "title": "Lon",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Rayon de recherche en kilometres.",
+            "in": "query",
+            "name": "rayon_km",
+            "required": false,
+            "schema": {
+              "default": 10.0,
+              "description": "Rayon de recherche en kilometres.",
+              "examples": [
+                10.0
+              ],
+              "exclusiveMinimum": 0,
+              "maximum": 50.0,
+              "title": "Rayon Km",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Limite la recherche a un carburant. Valeurs : gazole, sp95, e10, sp98, e85, gplc.",
+            "in": "query",
+            "name": "carburant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Limite la recherche a un carburant. Valeurs : gazole, sp95, e10, sp98, e85, gplc.",
+              "examples": [
+                "gazole"
+              ],
+              "title": "Carburant"
+            }
+          },
+          {
+            "description": "`prix` du moins cher au plus cher, ou `distance`.",
+            "in": "query",
+            "name": "tri",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Tri",
+              "default": "prix",
+              "description": "`prix` du moins cher au plus cher, ou `distance`."
+            }
+          },
+          {
+            "description": "Nombre maximal de stations renvoyees.",
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "description": "Nombre maximal de stations renvoyees.",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limite",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Nombre de stations a sauter (pagination).",
+            "in": "query",
+            "name": "decalage",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Nombre de stations a sauter (pagination).",
+              "minimum": 0,
+              "title": "Decalage",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseStationsProches"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Parametres invalides (problem+json)."
+          }
+        },
+        "summary": "Stations autour d'un point",
+        "tags": [
+          "stations"
+        ]
+      }
+    }
+  }
+}
