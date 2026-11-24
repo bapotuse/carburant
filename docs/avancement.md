@@ -1,59 +1,51 @@
 # Avancement
 
 ## Prochaine action
-**J1-5, vérification.** L'accueil mobile est **écrit mais pas encore vu tourner** :
-`make check` est vert (lint, typage, 281 tests) et `pnpm build` passe, mais la page
-n'a jamais été rendue avec de vraies données, et aucune capture n'a été produite.
-Rien n'est donc coché.
+**J1-6, le deploiement.** C'est la derniere etape du Jalon 1 : workflow GitHub
+Actions (images GHCR, puis ssh depuis le runner), Caddy et HTTPS, collecte
+planifiee par supercronic.
 
-Reprendre exactement ici :
+Tout ce qui ne depend pas de Baptiste peut s'ecrire maintenant. La **mise en ligne**,
+elle, attend trois choses de lui : les ports 80 et 443 ouverts dans la *security list*
+du VCN Oracle, un nom de domaine, et trois secrets GitHub. Voir le tableau ci-dessous.
 
-1. `make up`, puis charger des données :
-   `docker compose run --rm -v /home/user/data/raw:/brut:ro etl etl run --rejouer /brut/<fichier>`
-   (ou `etl run` tout court si le réseau de la machine le permet).
-2. Ouvrir <http://localhost:3000>, chercher « le Prado, Marseille », vérifier que la
-   liste sort avec les prix, les dates et les distances.
-3. Vérifier le CORS : le navigateur appelle l'API depuis `localhost:3000`, et
-   `API_ORIGINES_AUTORISEES` doit le couvrir.
-4. `make captures JALON=J1`, puis **ouvrir les captures** et les comparer à
-   `docs/anti-patterns-ia.md`.
-5. Parcours Playwright « chercher depuis un téléphone » (test obligatoire de
-   `CLAUDE.md`), et vérification des cibles ≥ 44 px sur l'accueil.
+**J1-5 est fait et verifie** le 24/11/2026 : l'accueil a ete rendu avec les vraies
+donnees, et le parcours « chercher depuis un telephone » tourne en Playwright sur les
+trois appareils.
 
-Ce qui est déjà en place pour J1-5 : client TypeScript **généré** depuis l'OpenAPI
-(`pnpm generer-client`), `ChampAdresse` (anti-rebond 350 ms, « Ma position » au clic
-seulement, suggestions au-dessus du champ), `CarteStation`, `IndicateurFraicheur`,
-et l'accueil avec la zone du pouce en bas.
+Constate :
 
-**Point d'attention relevé pendant l'écriture** : le navigateur et le rendu serveur
-n'atteignent pas l'API par la même adresse dans la pile Docker. Deux bases ont été
-séparées (`apiBase` public, `apiBaseInterne` pour le SSR) — à vérifier justement à
-l'étape 2.
+- `make up`, donnees reelles chargees, `/v1/meta` → 9 825 stations, 33 153 prix ;
+- l'accueil affiche « Les prix de 9 825 stations-service » — le nombre vient de l'API,
+  rendu cote serveur ;
+- « le Prado, Marseille » → le site dit que le lieu est ambigu et propose les cinq
+  candidats, sans choisir ; le choix d'un candidat sort 20 stations reelles avec leur
+  prix, leur date et leur distance, triees du moins cher au plus cher ;
+- CORS verifie : `access-control-allow-origin` present pour `localhost:3000`, absent
+  pour une origine etrangere ;
+- `make check` vert : 172 tests Python + 109 front ;
+- `make captures JALON=J1` → **33 captures** sur 3 appareils × 2 themes, compressees
+  de 35,3 Mo a 7,3 Mo, dans `docs/captures/J1/`, **ouvertes et comparees** a
+  `docs/anti-patterns-ia.md`.
 
-L'API est prête et mesurée : `/v1/stations/proches` répond en **18,7 ms au p95** sur
-200 requêtes réparties dans dix villes de France (cible : 300 ms).
+**Quatre defauts trouves par les tests Playwright, pas par relecture** (detail dans
+le journal et dans `docs/decisions.md`) : debordement de 191 px du au `fieldset`,
+125 px de debordement du aux radios masques, filet de la station la moins chere rogne
+par un `overflow` inutile, liens de la planche a 42,75 px au lieu de 44.
 
-J1-1 (téléchargement) et J1-2 (staging) sont faits et vérifiés sur les vraies données.
-Ce qui suit, dans l'ordre :
-
-1. ~~**J1-2** `staging`~~ ✅ fait le 24/11/2026.
-2. ~~**J1-3** `marts`~~ ✅ fait le 24/11/2026 — idempotence prouvée sur les vraies
-   données : au second passage, **0 prix inséré, 33 153 déjà connus**.
-3. ~~**J1-4** API~~ ✅ fait le 24/11/2026 — `/v1/stations/proches`, `/v1/geocode`,
-   `/v1/meta`, erreurs `problem+json`, `ETag` et `Cache-Control`. p95 **18,7 ms**.
-4. **J1-5** Web : accueil mobile, champ d'adresse avec anti-rebond, « Ma position »,
-   liste triée par prix, prix façon totem.
-5. **J1-6** Déploiement : workflow GitHub Actions (images GHCR + ssh depuis le runner),
-   Caddy, HTTPS, collecte planifiée par supercronic.
+**Un ecart releve en regardant les captures, laisse au Jalon 2** : les adresses du flux
+officiel melangent les casses (« 265 AVENUE DE MAZARGUES » a cote de « 57 Boulevard
+Romain Rolland »). Les normaliser demande de la prudence (BP, ZAC, D7, A50) : c'est la
+tache « normalisation » du J2, pas une retouche d'affichage.
 
 Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seuils, et
-`docs/decisions.md` avant de refaire un choix déjà tranché.
+`docs/decisions.md` avant de refaire un choix deja tranche.
 
-Le Jalon 0 est terminé : `make up` et `make check` verts sur machine propre, dépôt
-poussé sur https://github.com/bapotuse/carburant, **CI verte sur les 3 jobs**.
-Seule la paire typographique reste formellement ouverte : la paire B est appliquée par
-défaut, les paires A et C restent visibles sur `/planche-de-style` et en changer ne
-coûte que trois lignes.
+Le Jalon 0 est termine : `make up` et `make check` verts sur machine propre, depot
+pousse sur https://github.com/bapotuse/carburant, **CI verte sur les 3 jobs**.
+Seule la paire typographique reste formellement ouverte : la paire B est appliquee par
+defaut, les paires A et C restent visibles sur `/planche-de-style` et en changer ne
+coute que trois lignes.
 
 ## En attente de Baptiste
 
@@ -137,9 +129,9 @@ planche de style produites et relues.
 - **Non verifie** : le comportement reel sur iOS (voir `docs/a-verifier.md`, ligne 15).
 
 ### J1 — Tranche verticale en ligne
-- [ ] ETL minimal : extract (export du flux v2) → raw → staging → `dim_station` + `fact_prix` (grain = changement de prix, idempotent)
-- [ ] API : `/v1/stations/proches`, `/v1/geocode`, `/v1/sante`
-- [ ] Web : accueil mobile (adresse ou position → liste triée par prix, prix façon totem), dans le style validé sur la planche
+- [x] ETL minimal : extract (export du flux v2) → raw → staging → `dim_station` + `fact_prix` (grain = changement de prix, idempotent) — 24/11/2026
+- [x] API : `/v1/stations/proches`, `/v1/geocode`, `/v1/sante` — 24/11/2026, p95 18,7 ms
+- [x] Web : accueil mobile (adresse ou position → liste triée par prix, prix façon totem) — 24/11/2026, captures dans `docs/captures/J1/`
 - [ ] Déploiement sur le VPS, Caddy, HTTPS, collecte planifiée
 
 Sortie : depuis un téléphone, l'URL publique → « le Prado, Marseille » → stations réelles avec prix et fraîcheur ; deux exécutions successives de l'ETL ne créent aucun doublon.
@@ -193,6 +185,34 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-24 — Jalon 1, etape 5 : l'accueil mobile, verifie.** La page avait ete
+  ecrite la veille sans jamais tourner. Elle tourne maintenant contre la vraie API et
+  la vraie base : « le Prado, Marseille » est annonce comme ambigu, les cinq candidats
+  sont proposes, et le choix d'un candidat sort 20 stations reelles triees par prix,
+  chacune avec sa date et sa distance.
+  Test obligatoire de `CLAUDE.md` ecrit : le parcours « chercher depuis un telephone »,
+  sur iPhone SE, Pixel 7 et bureau. Il verifie aussi que le tri est croissant, que
+  chaque station porte une date, que changer de carburant relance vraiment la recherche
+  (les prix changent), qu'aucune cible n'est sous 44 px, qu'il n'y a pas de defilement
+  horizontal et que la geolocalisation n'est demandee qu'au clic.
+  **Quatre defauts trouves par ces tests, aucun par relecture :** l'accueil debordait
+  de 191 px a 375 px de large (regle UA `min-inline-size: min-content` sur les
+  `fieldset`, qui l'emporte sur `overflow-x: auto`) ; les boutons radio masques,
+  absolus sans bloc conteneur local, se positionnaient par rapport a la barre collante
+  et ajoutaient 125 px de defilement horizontal ; `overflow-y: auto` sur le `main`
+  rognait le filet terracotta de la station la moins chere ; les liens de paire de la
+  planche de style mesuraient 42,75 px de large pour 44 exiges.
+  **Trois corrections nees de la relecture des captures :** le titre des resultats ne
+  porte plus que le lieu (« Gazole pres de Avenue du prado » n'est pas du francais, et
+  aucune elision ne tient sur des libelles de geocodeur) ; le site n'affiche plus le
+  champ technique `raison` (« le meilleur candidat ne marque que 0,608 ») ; la croix
+  d'effacement native du champ, bleue dans Chrome, est redessinee a l'encre du site, et
+  une recherche sans resultat le dit au lieu de rester muette.
+  **Deux pieges d'outillage corriges :** Playwright reutilisait un serveur lance avant
+  le build et capturait donc un site perime ; et il reclame le Chromium 1255 quand
+  l'image fournit le 1243, ce qui faisait echouer tous les tests.
+  33 captures, 35,3 Mo compresses a 7,3 Mo. `make check` : 281 tests verts.
 
 - **2026-11-24 — Jalon 1, étape 4 : l'API.** `/v1/stations/proches` (tri par prix ou
   distance, filtre carburant, pagination), `/v1/geocode` (proxy Géoplateforme, cache
