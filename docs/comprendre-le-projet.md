@@ -140,7 +140,14 @@ Mesurés le 23/11/2026. Les cases vides seront remplies au jalon indiqué.
 | Durée du `COPY` de 5,3 M de lignes | **14,0 s** | `\timing` dans psql |
 | Requête « stations proches » | **13,7 ms** | `EXPLAIN ANALYZE`, 10 km autour du Prado, 14 partitions |
 | JS client, tout le site | **77,7 Ko gzip** | sortie de build Nuxt, mesurée fichier par fichier |
-| Tests | **112 Python + 109 front = 221** | `make check` |
+| Tests | **172 Python + 109 front = 281** | `make check`, au 24/11/2026 |
+| Stations chargées en base | **9 825** | `etl run` sur le flux réel |
+| Changements de prix chargés | **33 153** | une collecte, grain « un changement de prix » |
+| Ruptures de stock chargées | **22 186** | carburant annoncé mais sans prix |
+| Prix rejetés à la validation | **5** | tous des E85 à 1,99 €, erreurs de saisie |
+| Idempotence | **0 prix inséré, 33 153 déjà connus** | deuxième exécution de suite sur les mêmes données |
+| Partitions créées | **15** | juillet 2025 → décembre 2026, partition DEFAULT vide |
+| `/v1/stations/proches`, p95 | **18,7 ms** | 200 requêtes dans dix villes de France (médiane 10,4 ms, max 65,5 ms) |
 | Durée de l'amorçage complet de l'historique | à mesurer (Jalon 2) | |
 | Scores Lighthouse mobile | à mesurer (Jalon 5) | |
 | Taux de couverture des enseignes OSM | à mesurer (Jalon 2) | |
@@ -170,6 +177,23 @@ Et en regardant ce que la règle attrape alors, deuxième surprise : L'Île-d'Ye
 Val-d'Isère, Saint-Tropez — **de vrais prix**, élevés parce que la station est sur une
 île ou en station de ski. D'où la règle finale : un prix suspect est conservé et
 affiché, simplement exclu des classements.
+
+**La transaction qui annulait le journal.** `/v1/meta` affirmait qu'aucune collecte
+n'avait jamais réussi, alors que les données étaient bien en base. En mode non
+autocommit, psycopg ouvre une transaction dès le **premier ordre**, y compris un simple
+`SELECT`. Un contrôle de la partition DEFAULT, placé entre le chargement et la clôture
+de l'exécution, transformait donc les blocs suivants en simples points de reprise, et
+la fermeture de la connexion annulait la clôture. Corrigé en `autocommit=True` avec des
+transactions explicites, et verrouillé par un test de non-régression. C'est le genre de
+bogue qu'aucune relecture ne trouve : il fallait regarder ce que l'API racontait.
+
+**La politique de sécurité qui éteignait le site.** Une CSP `script-src 'self'` posée
+par le reverse proxy bloque les deux scripts **en ligne** que Nuxt émet dans chaque page
+(sa carte d'import et sa configuration publique). Résultat : la page s'affiche
+parfaitement — elle est rendue côté serveur — mais plus rien ne répond, aucun bouton,
+aucune suggestion d'adresse. Le site pose désormais sa propre politique avec un nonce
+par requête, et un test Playwright surveille la console pendant tout le parcours, parce
+qu'aucune autre assertion ne voit la différence tant qu'on ne touche pas aux boutons.
 
 **Le seuil de fraîcheur qui aurait écarté un prix sur cinq.** La date de mise à jour
 est celle du dernier *changement* de prix, pas du dernier contrôle. Une station qui ne

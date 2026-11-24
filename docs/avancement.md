@@ -1,51 +1,47 @@
 # Avancement
 
 ## Prochaine action
-**J1-6, le deploiement.** C'est la derniere etape du Jalon 1 : workflow GitHub
-Actions (images GHCR, puis ssh depuis le runner), Caddy et HTTPS, collecte
-planifiee par supercronic.
+**La mise en ligne. Elle depend entierement de Baptiste** : voir les trois demandes du
+tableau ci-dessous. Tout ce qui pouvait etre ecrit et verifie sans lui l'est.
 
-Tout ce qui ne depend pas de Baptiste peut s'ecrire maintenant. La **mise en ligne**,
-elle, attend trois choses de lui : les ports 80 et 443 ouverts dans la *security list*
-du VCN Oracle, un nom de domaine, et trois secrets GitHub. Voir le tableau ci-dessous.
+Des que les trois secrets GitHub existent, un push sur `main` (ou `make deploy`)
+deploie tout seul. Il n'y a plus une ligne de code a ecrire pour cela.
 
-**J1-5 est fait et verifie** le 24/11/2026 : l'accueil a ete rendu avec les vraies
-donnees, et le parcours « chercher depuis un telephone » tourne en Playwright sur les
-trois appareils.
+**Pendant ce temps, le travail continue au Jalon 2** (ETL complet) : toutes les regles
+de transformation, le partitionnement automatique, `snapshot_prix_jour`, les facteurs
+d'emission de l'ADEME, l'amorcage de l'historique, les controles qualite. Rien de tout
+cela n'a besoin du VPS.
 
-Constate :
+**J1-6 est ecrit et verifie en local** le 24/11/2026 :
 
-- `make up`, donnees reelles chargees, `/v1/meta` → 9 825 stations, 33 153 prix ;
-- l'accueil affiche « Les prix de 9 825 stations-service » — le nombre vient de l'API,
-  rendu cote serveur ;
-- « le Prado, Marseille » → le site dit que le lieu est ambigu et propose les cinq
-  candidats, sans choisir ; le choix d'un candidat sort 20 stations reelles avec leur
-  prix, leur date et leur distance, triees du moins cher au plus cher ;
-- CORS verifie : `access-control-allow-origin` present pour `localhost:3000`, absent
-  pour une origine etrangere ;
-- `make check` vert : 172 tests Python + 109 front ;
-- `make captures JALON=J1` → **33 captures** sur 3 appareils × 2 themes, compressees
-  de 35,3 Mo a 7,3 Mo, dans `docs/captures/J1/`, **ouvertes et comparees** a
-  `docs/anti-patterns-ia.md`.
+- `compose.prod.yaml`, autonome, avec Caddy ; `infra/caddy/Caddyfile` ;
+  `.github/workflows/deploiement.yml` ; `infra/scripts/deployer.sh` (`make deploy`) ;
+- les **images multi-architecture sont publiees** : `ghcr.io/bapotuse/carburant-api`,
+  `-web` et `-etl`, en `linux/amd64` **et** `linux/arm64` — verifie avec
+  `docker buildx imagetools inspect`. Le VPS ne construira rien, quelle que soit son
+  architecture ;
+- **la pile de production a tourne en local** : cinq conteneurs sains, accueil rendu
+  cote serveur avec les 9 825 stations, parcours complet (adresse ambigue, cinq
+  candidats, 20 stations avec prix et dates) **sans aucune erreur de console**, `/docs`
+  et `/v1/openapi.json` a 200, compression active, en-tetes de securite poses ;
+- supercronic execute bien la commande planifiee (observe sur une table a la minute) ;
+- **CI verte sur les 4 jobs**, dont le nouveau job « Infra », et le workflow de
+  deploiement vert : images publiees, etape de deploiement **sautee sans echec** faute
+  de secrets, comme prevu.
 
-**Quatre defauts trouves par les tests Playwright, pas par relecture** (detail dans
-le journal et dans `docs/decisions.md`) : debordement de 191 px du au `fieldset`,
-125 px de debordement du aux radios masques, filet de la station la moins chere rogne
-par un `overflow` inutile, liens de la planche a 42,75 px au lieu de 44.
+**Trois defauts trouves en faisant tourner la pile, pas en la relisant** (detail dans
+le journal) : la CSP posee par Caddy eteignait le site, la meme politique laissait
+`/docs` en page blanche, et une variable vide produisait un `email` sans argument qui
+faisait redemarrer Caddy en boucle.
 
-**Un ecart releve en regardant les captures, laisse au Jalon 2** : les adresses du flux
-officiel melangent les casses (« 265 AVENUE DE MAZARGUES » a cote de « 57 Boulevard
-Romain Rolland »). Les normaliser demande de la prudence (BP, ZAC, D7, A50) : c'est la
-tache « normalisation » du J2, pas une retouche d'affichage.
+**Ce qui n'a pas pu etre verifie ici** : le geocodage depuis le conteneur d'API. La
+sortie reseau de cet environnement de developpement ne traverse pas les conteneurs ;
+le parcours complet a donc ete joue avec l'API lancee sur la machine hote, qui est
+exactement le meme code. Sur le VPS, le conteneur a une sortie reseau normale. A
+reverifier a la premiere mise en ligne.
 
 Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seuils, et
 `docs/decisions.md` avant de refaire un choix deja tranche.
-
-Le Jalon 0 est termine : `make up` et `make check` verts sur machine propre, depot
-pousse sur https://github.com/bapotuse/carburant, **CI verte sur les 3 jobs**.
-Seule la paire typographique reste formellement ouverte : la paire B est appliquee par
-defaut, les paires A et C restent visibles sur `/planche-de-style` et en changer ne
-coute que trois lignes.
 
 ## En attente de Baptiste
 
@@ -53,9 +49,9 @@ coute que trois lignes.
 |---|---|---|---|
 | 1 | Dépôt GitHub + application Claude installée dessus | J0-12, J0-14 | ✅ fait le 23/11/2026 |
 | 2 | IP et utilisateur du VPS | Jalon 1 : déploiement | ✅ `opc@144.24.195.97` (Oracle Linux) |
-| 3 | **Ports 80 et 443 dans la *security list* du VCN Oracle** | mise en ligne du Jalon 1 | ⏳ instructions données le 23/11, il ne savait pas où cliquer |
-| 4 | **Nom de domaine** — il n'en a pas. Option a : acheter un `.fr` (~7 €/an, recommandé). Option b : sous-domaine gratuit DuckDNS. Sans domaine, pas de HTTPS, donc **pas de géolocalisation testable sur son iPhone** | mise en ligne du Jalon 1 | ⏳ en attente de son choix |
-| 5 | Trois secrets GitHub pour le déploiement (`VPS_HOST`, `VPS_USER`, clé privée) | fin du Jalon 1 | 🔜 à demander quand le workflow sera écrit |
+| 3 | **Ports 80 et 443 dans la *security list* du VCN Oracle** | mise en ligne | ⏳ redemandé le 24/11 avec le chemin exact dans la console |
+| 4 | **Nom de domaine** — il n'en a pas. Option a : sous-domaine DuckDNS, gratuit, 5 minutes (recommandé pour démarrer). Option b : acheter un `.fr` (~7 €/an). Sans domaine, pas de HTTPS, donc **pas de géolocalisation testable sur son iPhone** | mise en ligne | ⏳ en attente de son choix |
+| 5 | **Trois secrets GitHub** `VPS_HOST`, `VPS_USER`, `VPS_CLE_PRIVEE`, plus une variable `CARBURANT_DOMAINE` | mise en ligne | ⏳ demandé le 24/11, le workflow est écrit et vert |
 | 6 | Compte healthchecks.io | Jalon 6 : alertes | 🔜 plus tard |
 | 7 | Compte PyPI + 2FA | Jalon 4 : `uvx prix-carburant-mcp` | 🔜 plus tard |
 
@@ -64,7 +60,8 @@ coute que trois lignes.
 et C restent déclarées et visibles sur `/planche-de-style`. En changer coûte trois
 lignes dans `web/app/styles/tokens.css` plus le préchargement dans `nuxt.config.ts`.
 
-**Rien de tout cela ne bloque le travail du Jalon 1** jusqu'à sa mise en ligne.
+**Rien de tout cela ne bloque le Jalon 2**, qui commence maintenant. Cela ne bloque que
+la mise en ligne.
 
 ## Jalons
 Chaque jalon se termine par : critère de sortie vérifié, bilan à Baptiste, mise à jour de comprendre-le-projet.md.
@@ -132,7 +129,9 @@ planche de style produites et relues.
 - [x] ETL minimal : extract (export du flux v2) → raw → staging → `dim_station` + `fact_prix` (grain = changement de prix, idempotent) — 24/11/2026
 - [x] API : `/v1/stations/proches`, `/v1/geocode`, `/v1/sante` — 24/11/2026, p95 18,7 ms
 - [x] Web : accueil mobile (adresse ou position → liste triée par prix, prix façon totem) — 24/11/2026, captures dans `docs/captures/J1/`
-- [ ] Déploiement sur le VPS, Caddy, HTTPS, collecte planifiée
+- [x] Déploiement sur le VPS, Caddy, HTTPS, collecte planifiée — écrit et vérifié en
+      local le 24/11/2026, images multi-architecture publiées sur GHCR, CI et workflow
+      de déploiement verts. **Mise en ligne en attente des trois actions de Baptiste.**
 
 Sortie : depuis un téléphone, l'URL publique → « le Prado, Marseille » → stations réelles avec prix et fraîcheur ; deux exécutions successives de l'ETL ne créent aucun doublon.
 
@@ -185,6 +184,37 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-24 — Jalon 1, etape 6 : le deploiement.** Pile de production autonome
+  (`compose.prod.yaml`) avec Caddy en reverse proxy, workflow GitHub Actions qui
+  construit et publie les images **multi-architecture** sur GHCR puis deploie par ssh
+  depuis le runner, `make deploy` pour declencher la chose a la main, et collecte
+  planifiee par supercronic.
+  **Images verifiees publiees en amd64 et arm64** pour les trois briques : le VPS ne
+  construira rien, quelle que soit son architecture (toujours inconnue a ce jour).
+  **La pile de production a reellement tourne ici** : cinq conteneurs sains, accueil
+  rendu cote serveur avec les 9 825 stations, parcours complet joue dans un navigateur
+  a travers Caddy — adresse ambigue, cinq candidats, 20 stations avec prix et dates —
+  et **aucune erreur de console**.
+  **Trois defauts trouves par cet essai, aucun par relecture :**
+  la politique de securite du contenu posee par Caddy bloquait les deux scripts en
+  ligne de Nuxt (carte d'import, configuration publique) ; la page s'affichait
+  parfaitement, rendue cote serveur, mais plus rien ne repondait. Le site pose
+  desormais sa propre politique avec un **nonce par requete**, et un test Playwright
+  surveille la console pendant tout le parcours, parce qu'aucune autre assertion ne
+  voit la difference tant qu'on ne touche pas aux boutons.
+  La meme politique laissait `/docs` en page blanche : Swagger UI charge son script,
+  sa feuille et sa police depuis jsdelivr. L'API a donc sa propre politique.
+  Enfin, une variable d'environnement vide produisait un `email` sans argument dans le
+  Caddyfile et Caddy redemarrait en boucle : le defaut d'un placeholder ne s'applique
+  qu'a une variable **absente**, pas vide. La directive est supprimee.
+  Deux details au passage : le schema OpenAPI est servi sous `/v1/openapi.json` et non
+  a la racine, et Nitro envoyait deja le `Cache-Control` des fichiers versionnes, que
+  Caddy redeclarait en double.
+  Nouveau job CI « Infra » : coherence des deux piles **a partir du seul
+  `.env.example`**, Caddyfile valide et bien formate, table cron valide, empreinte de
+  supercronic identique a celle du Dockerfile. CI verte sur 4 jobs ; workflow de
+  deploiement vert, avec l'etape de deploiement **sautee sans echec** faute de secrets.
 
 - **2026-11-24 — Jalon 1, etape 5 : l'accueil mobile, verifie.** La page avait ete
   ecrite la veille sans jamais tourner. Elle tourne maintenant contre la vraie API et
