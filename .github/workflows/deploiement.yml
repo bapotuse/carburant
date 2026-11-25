@@ -88,7 +88,10 @@ jobs:
       packages: read
     environment:
       name: production
-      url: https://${{ vars.CARBURANT_DOMAINE }}
+      # Une seule variable a regler dans les parametres du depot, schema compris :
+      # http://144.24.195.97 sans nom de domaine, https://… une fois qu'il y en a
+      # un. Tout le reste en decoule, cote VPS, dans preparer-le-vps.sh.
+      url: ${{ vars.CARBURANT_SITE_URL }}
     steps:
       - uses: actions/checkout@v5
 
@@ -116,10 +119,28 @@ jobs:
           cible="$UTILISATEUR@$HOTE"
           ssh -i ~/.ssh/deploiement "$cible" 'mkdir -p /opt/carburant/infra/caddy'
           scp -i ~/.ssh/deploiement \
-            compose.prod.yaml infra/scripts/sur-le-vps.sh "$cible:/opt/carburant/"
+            compose.prod.yaml infra/scripts/sur-le-vps.sh infra/scripts/preparer-le-vps.sh \
+            "$cible:/opt/carburant/"
           scp -i ~/.ssh/deploiement \
             infra/caddy/Caddyfile "$cible:/opt/carburant/infra/caddy/Caddyfile"
-          ssh -i ~/.ssh/deploiement "$cible" 'chmod +x /opt/carburant/sur-le-vps.sh'
+          ssh -i ~/.ssh/deploiement "$cible" 'chmod +x /opt/carburant/*.sh'
+
+      - name: Preparer le VPS
+        # Docker, pare-feu de l'instance, swap si la machine est petite, et le .env
+        # (dont le mot de passe de la base, tire au sort sur place et jamais
+        # ailleurs). Idempotent : rejoue a chaque deploiement sans rien casser.
+        env:
+          HOTE: ${{ secrets.VPS_HOST }}
+          UTILISATEUR: ${{ secrets.VPS_USER }}
+        run: |
+          set -eu
+          url='${{ vars.CARBURANT_SITE_URL }}'
+          # Sans variable reglee, on sert en clair sur l'adresse IP : c'est le mode
+          # de la premiere mise en ligne, avant tout nom de domaine.
+          [ -n "$url" ] || url="http://$HOTE"
+          echo "Site : $url"
+          ssh -i ~/.ssh/deploiement "$UTILISATEUR@$HOTE" \
+            "SITE_URL='$url' bash /opt/carburant/preparer-le-vps.sh"
 
       - name: Authentifier le VPS aupres de GHCR
         env:
@@ -132,7 +153,7 @@ jobs:
           # n'apparait ni dans la ligne de commande, ni dans `ps` sur le VPS. Il
           # expire a la fin de ce job.
           printf '%s' "$JETON" | ssh -i ~/.ssh/deploiement "$UTILISATEUR@$HOTE" \
-            "docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+            "sudo docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
 
       - name: Deployer
         env:
@@ -144,16 +165,19 @@ jobs:
             "REGISTRE='${{ env.REGISTRE }}' TAG='${{ github.sha }}' bash /opt/carburant/sur-le-vps.sh"
 
       - name: Essai depuis l'exterieur
-        if: vars.CARBURANT_DOMAINE != ''
+        env:
+          HOTE: ${{ secrets.VPS_HOST }}
         run: |
           set -eu
-          domaine='${{ vars.CARBURANT_DOMAINE }}'
-          # Depuis le runner, donc par le vrai chemin public : DNS, Caddy, TLS.
-          code=$(curl -sS -o /tmp/accueil.html -w '%{http_code}' "https://$domaine/")
-          echo "GET https://$domaine/ -> $code"
+          url='${{ vars.CARBURANT_SITE_URL }}'
+          [ -n "$url" ] || url="http://$HOTE"
+          # Depuis le runner, donc par le vrai chemin public : reseau, pare-feu,
+          # Caddy, et TLS le jour ou il y en aura.
+          code=$(curl -sS -o /tmp/accueil.html -w '%{http_code}' "$url/")
+          echo "GET $url/ -> $code"
           test "$code" = 200
           grep -q 'Où faire le plein' /tmp/accueil.html
-          sante=$(curl -sS "https://$domaine/v1/sante")
+          sante=$(curl -sS "$url/v1/sante")
           echo "/v1/sante -> $sante"
           printf '%s' "$sante" | grep -q '"statut"'
 
