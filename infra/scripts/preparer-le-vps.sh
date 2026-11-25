@@ -159,6 +159,13 @@ FIN
 chmod 600 .env
 echo "$RACINE/.env ecrit, droits 600."
 
+# --------------------------------------------------------------- ports 80 et 443
+titre "Qui ecoute sur 80 et 443"
+# Le VPS est destine a heberger plusieurs projets : il faut savoir ce qui occupe
+# deja ces ports avant que Caddy n'essaie de les prendre. Le 25/11/2026, un service
+# inconnu tenait le port 80 et faisait echouer le demarrage de Caddy.
+sudo ss -ltnp "( sport = :80 or sport = :443 )" 2>/dev/null | sed 's/^/  /' || true
+
 # --------------------------------------------------------------- anti-force-brute
 titre "fail2ban"
 # Affiche a chaque deploiement, pour qu'un bannissement du runner se voie dans le
