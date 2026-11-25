@@ -89,6 +89,10 @@ services:
       - "443:443/udp"
     environment:
       CARBURANT_DOMAINE: ${CARBURANT_DOMAINE:?CARBURANT_DOMAINE manquant dans le .env du VPS}
+      # Adresses qui redirigent vers le site (l'IP nue, un ancien nom). `:81` quand
+      # il n'y a rien a rediriger : le port n'est pas publie, le bloc est inerte.
+      CARBURANT_REDIRECTIONS: ${CARBURANT_REDIRECTIONS:-:81}
+      CARBURANT_SITE_URL: ${NUXT_PUBLIC_API_BASE:?NUXT_PUBLIC_API_BASE manquant dans le .env du VPS}
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Les certificats obtenus survivent aux redeploiements : sans ce volume,

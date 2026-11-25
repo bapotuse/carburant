@@ -118,7 +118,15 @@ if [ "$schema" = "https" ]; then
 else
     domaine=":80"
 fi
-echo "Site : $SITE_URL  (Caddy ecoutera sur « $domaine »)"
+# Quand le site est en HTTPS, l'adresse IP nue ne sert plus a rien : on y repond
+# quand meme, en clair, pour rediriger. En HTTP il n'y a rien a rediriger, le site
+# repondant deja sur l'IP : `:81`, un port non publie, rend le bloc inerte.
+if [ "$schema" = "https" ] && [ -n "${IP_PUBLIQUE:-}" ]; then
+    redirections="http://$IP_PUBLIQUE"
+else
+    redirections=":81"
+fi
+echo "Site : $SITE_URL  (Caddy ecoutera sur « $domaine », redirections : « $redirections »)"
 
 # La meme image qu'en developpement, quelle que soit l'architecture : une base de
 # production sur PostGIS 3.6 et un developpement sur 3.7, c'est du SQL ecrit contre
@@ -148,6 +156,7 @@ API_CACHE_TENDANCES_SECONDES=3600
 API_SANTE_AGE_MAX_MINUTES=60
 
 CARBURANT_DOMAINE=$domaine
+CARBURANT_REDIRECTIONS=$redirections
 NUXT_PUBLIC_API_BASE=$SITE_URL
 CARBURANT_API_BASE=http://api:8000/v1
 

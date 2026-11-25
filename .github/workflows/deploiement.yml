@@ -14,6 +14,14 @@ concurrency:
 
 env:
   REGISTRE: ghcr.io/${{ github.repository_owner }}
+  # L'adresse publique du site, schema compris. Elle vit ici, dans le depot, et non
+  # dans une variable de depot invisible : elle se relit en revue, elle change par
+  # un commit, et personne n'a de case a cocher quelque part. Une variable
+  # `CARBURANT_SITE_URL` definie dans les parametres du depot la remplace si besoin.
+  #
+  # `sslip.io` resout tout sous-domaine contenant une adresse IP vers cette adresse,
+  # sans inscription. Le jour d'un vrai nom de domaine, cette ligne seule change.
+  SITE_PAR_DEFAUT: https://carburant.144-24-195-97.sslip.io
 
 jobs:
   images:
@@ -88,10 +96,7 @@ jobs:
       packages: read
     environment:
       name: production
-      # Une seule variable a regler dans les parametres du depot, schema compris :
-      # http://144.24.195.97 sans nom de domaine, https://… une fois qu'il y en a
-      # un. Tout le reste en decoule, cote VPS, dans preparer-le-vps.sh.
-      url: ${{ vars.CARBURANT_SITE_URL }}
+      url: ${{ vars.CARBURANT_SITE_URL || env.SITE_PAR_DEFAUT }}
     steps:
       - uses: actions/checkout@v5
 
@@ -176,12 +181,10 @@ jobs:
           UTILISATEUR: ${{ secrets.VPS_USER }}
         run: |
           set -eu
-          url='${{ vars.CARBURANT_SITE_URL }}'
-          # Sans variable reglee, on sert en clair sur l'adresse IP : c'est le mode
-          # de la premiere mise en ligne, avant tout nom de domaine.
-          [ -n "$url" ] || url="http://$HOTE"
+          url='${{ vars.CARBURANT_SITE_URL || env.SITE_PAR_DEFAUT }}'
           echo "Site : $url"
-          ssh deploiement-carburant "SITE_URL='$url' bash /opt/carburant/preparer-le-vps.sh"
+          ssh deploiement-carburant \
+            "SITE_URL='$url' IP_PUBLIQUE='$HOTE' bash /opt/carburant/preparer-le-vps.sh"
 
       - name: Authentifier le VPS aupres de GHCR
         env:
@@ -210,8 +213,7 @@ jobs:
           HOTE: ${{ secrets.VPS_HOST }}
         run: |
           set -eu
-          url='${{ vars.CARBURANT_SITE_URL }}'
-          [ -n "$url" ] || url="http://$HOTE"
+          url='${{ vars.CARBURANT_SITE_URL || env.SITE_PAR_DEFAUT }}'
           # Depuis le runner, donc par le vrai chemin public : reseau, pare-feu,
           # Caddy, et TLS le jour ou il y en aura.
           code=$(curl -sS -o /tmp/accueil.html -w '%{http_code}' "$url/")

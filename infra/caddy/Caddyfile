@@ -69,3 +69,15 @@
 		format json
 	}
 }
+
+# Toute arrivee par une autre porte -- l'adresse IP nue, un ancien nom -- repart
+# vers l'adresse officielle. Sans ce bloc, taper l'IP dans un navigateur ne donne
+# rien et laisse croire que le site est tombe.
+#
+# Les adresses y sont declarees en `http://` explicite : Caddy les sert alors en
+# clair, sans essayer d'obtenir un certificat pour une adresse IP. Le defaut `:81`
+# n'est publie par aucun conteneur : il rend le bloc inerte quand il n'y a rien a
+# rediriger, le site etant alors deja servi en clair.
+{$CARBURANT_REDIRECTIONS::81} {
+	redir {$CARBURANT_SITE_URL:http://localhost}{uri} permanent
+}
