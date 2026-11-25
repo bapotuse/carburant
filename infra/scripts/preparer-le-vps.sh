@@ -159,5 +159,15 @@ FIN
 chmod 600 .env
 echo "$RACINE/.env ecrit, droits 600."
 
+# --------------------------------------------------------------- anti-force-brute
+titre "fail2ban"
+# Affiche a chaque deploiement, pour qu'un bannissement du runner se voie dans le
+# journal au lieu de ressembler a une panne reseau.
+if systemctl is-active --quiet fail2ban 2>/dev/null; then
+    sudo fail2ban-client status sshd 2>&1 | sed 's/^/  /' || true
+else
+    echo "fail2ban n'est pas actif."
+fi
+
 titre "Pret"
 echo "La machine est prete a recevoir le deploiement."

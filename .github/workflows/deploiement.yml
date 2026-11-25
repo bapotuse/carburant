@@ -104,23 +104,33 @@ jobs:
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$CLE" > ~/.ssh/deploiement
           chmod 600 ~/.ssh/deploiement
-          # On enregistre la cle d'hote telle qu'elle se presente. C'est du TOFU :
-          # acceptable pour une machine dont on connait l'IP et qu'on vient de
-          # creer, et bien meilleur que `StrictHostKeyChecking=no`, qui accepterait
-          # n'importe quel changement de cle par la suite.
-          ssh-keyscan -H "$HOTE" >> ~/.ssh/known_hosts 2>/dev/null
-          # Options communes a toutes les connexions du deploiement. Un runner qui
-          # attend deux minutes sur un port muet ne sert a rien : on echoue vite et
-          # on reessaie, plutot que de laisser filer le delai par defaut.
+          # Pas de `ssh-keyscan`. Il ouvre une connexion par type de cle -- trois --
+          # et les referme avant de s'authentifier. fail2ban, dans la configuration
+          # par defaut de ces images, compte « Connection closed [preauth] » comme
+          # un echec : trois d'un coup suffisent a faire bannir le runner. C'est ce
+          # qu'on observait le 25/11/2026 -- la premiere connexion passait, les
+          # suivantes expiraient quelques secondes plus tard.
+          #
+          # `accept-new` fait le meme travail sans connexion supplementaire : la cle
+          # est enregistree au premier contact, et un changement ulterieur est
+          # refuse, contrairement a `StrictHostKeyChecking=no`.
+          #
+          # `ControlMaster` va plus loin : les six commandes du deploiement passent
+          # dans une seule connexion TCP au lieu de six. Moins de bruit pour
+          # fail2ban, et c'est aussi plus rapide.
           {
             echo 'Host deploiement-carburant'
             echo "  HostName $HOTE"
             echo "  User ${{ secrets.VPS_USER }}"
             echo '  IdentityFile ~/.ssh/deploiement'
             echo '  IdentitiesOnly yes'
+            echo '  StrictHostKeyChecking accept-new'
             echo '  ConnectTimeout 15'
             echo '  ServerAliveInterval 15'
             echo '  ServerAliveCountMax 4'
+            echo '  ControlMaster auto'
+            echo '  ControlPath ~/.ssh/cm-%r@%h:%p'
+            echo '  ControlPersist 10m'
           } > ~/.ssh/config
           chmod 600 ~/.ssh/config
 
@@ -214,4 +224,6 @@ jobs:
 
       - name: Effacer la cle
         if: always()
-        run: rm -f ~/.ssh/deploiement ~/.ssh/config
+        run: |
+          ssh -O exit deploiement-carburant 2>/dev/null || true
+          rm -f ~/.ssh/deploiement ~/.ssh/config ~/.ssh/cm-*
