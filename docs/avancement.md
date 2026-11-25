@@ -1,44 +1,41 @@
 # Avancement
 
 ## Prochaine action
-**La mise en ligne. Elle depend entierement de Baptiste** : voir les trois demandes du
-tableau ci-dessous. Tout ce qui pouvait etre ecrit et verifie sans lui l'est.
+**Jalon 2 : l'ETL complet.** Toutes les regles de transformation testees, le
+partitionnement automatique, `snapshot_prix_jour` et les vues agregees, les facteurs
+d'emission de l'ADEME, les enseignes OpenStreetMap, l'amorcage de l'historique depuis
+les archives, les controles qualite a chaque execution, puis la revue `revue-donnees`.
 
-Des que les trois secrets GitHub existent, un push sur `main` (ou `make deploy`)
-deploie tout seul. Il n'y a plus une ligne de code a ecrire pour cela.
+Rien n'attend Baptiste pour cela.
 
-**Pendant ce temps, le travail continue au Jalon 2** (ETL complet) : toutes les regles
-de transformation, le partitionnement automatique, `snapshot_prix_jour`, les facteurs
-d'emission de l'ADEME, l'amorcage de l'historique, les controles qualite. Rien de tout
-cela n'a besoin du VPS.
+**Le Jalon 1 est termine.** Le critere de sortie est atteint et constate :
 
-**J1-6 est ecrit et verifie en local** le 24/11/2026 :
+> depuis un telephone, l'URL publique → « le Prado, Marseille » → stations reelles
+> avec prix et fraicheur ; deux executions successives de l'ETL ne creent aucun doublon.
 
-- `compose.prod.yaml`, autonome, avec Caddy ; `infra/caddy/Caddyfile` ;
-  `.github/workflows/deploiement.yml` ; `infra/scripts/deployer.sh` (`make deploy`) ;
-- les **images multi-architecture sont publiees** : `ghcr.io/bapotuse/carburant-api`,
-  `-web` et `-etl`, en `linux/amd64` **et** `linux/arm64` — verifie avec
-  `docker buildx imagetools inspect`. Le VPS ne construira rien, quelle que soit son
-  architecture ;
-- **la pile de production a tourne en local** : cinq conteneurs sains, accueil rendu
-  cote serveur avec les 9 825 stations, parcours complet (adresse ambigue, cinq
-  candidats, 20 stations avec prix et dates) **sans aucune erreur de console**, `/docs`
-  et `/v1/openapi.json` a 200, compression active, en-tetes de securite poses ;
-- supercronic execute bien la commande planifiee (observe sur une table a la minute) ;
-- **CI verte sur les 4 jobs**, dont le nouveau job « Infra », et le workflow de
-  deploiement vert : images publiees, etape de deploiement **sautee sans echec** faute
-  de secrets, comme prevu.
+**<https://carburant.144-24-195-97.sslip.io>** — en ligne, en HTTPS, certificat
+Let's Encrypt obtenu au premier essai. Taper `144.24.195.97` redirige vers cette
+adresse.
 
-**Trois defauts trouves en faisant tourner la pile, pas en la relisant** (detail dans
-le journal) : la CSP posee par Caddy eteignait le site, la meme politique laissait
-`/docs` en page blanche, et une variable vide produisait un `email` sans argument qui
-faisait redemarrer Caddy en boucle.
+Constate le 25/11/2026, sur le site en ligne et non en local :
 
-**Ce qui n'a pas pu etre verifie ici** : le geocodage depuis le conteneur d'API. La
-sortie reseau de cet environnement de developpement ne traverse pas les conteneurs ;
-le parcours complet a donc ete joue avec l'API lancee sur la machine hote, qui est
-exactement le meme code. Sur le VPS, le conteneur a une sortie reseau normale. A
-reverifier a la premiere mise en ligne.
+- le parcours « chercher depuis un telephone » rejoue **contre la production** par le
+  deploiement lui-meme, sur iPhone SE, Pixel 7 et bureau, sans aucune erreur de
+  console ; captures dans `docs/captures/production/` ;
+- « le Prado, Marseille » → ambiguite annoncee, cinq candidats, puis 20 stations
+  reelles triees par prix, chacune avec sa date et sa distance ;
+- `/v1/sante` → `statut: ok`, base joignable, schema pret ;
+- les prix affichés **bougent** : 1,975 €/L « il y a 2 heures » la ou la veille en
+  local on lisait 1,990 € « il y a 23 heures ». Le collecteur tourne sur le VPS
+  toutes les quinze minutes, tout seul.
+
+La machine est enfin connue : **Ampere aarch64, Oracle Linux 9.8, 10 Go de RAM, 4 Go
+de swap, 17 Go de disque libre**. PostGIS est aligne sur la meme image qu'elle, en
+developpement comme en CI.
+
+**Ce qui reste a faire par Baptiste, et par lui seul : ouvrir le site sur son
+iPhone**, en 4G et en wifi, et essayer « Ma position ». C'est la seule chose que
+personne d'autre ne peut verifier, et le HTTPS vient tout juste de la rendre possible.
 
 Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seuils, et
 `docs/decisions.md` avant de refaire un choix deja tranche.
@@ -49,9 +46,10 @@ Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seui
 |---|---|---|---|
 | 1 | Dépôt GitHub + application Claude installée dessus | J0-12, J0-14 | ✅ fait le 23/11/2026 |
 | 2 | IP et utilisateur du VPS | Jalon 1 : déploiement | ✅ `opc@144.24.195.97` (Oracle Linux) |
-| 3 | **Ports 80 et 443 dans la *security list* du VCN Oracle** | mise en ligne | ⏳ redemandé le 24/11 avec le chemin exact dans la console |
-| 4 | **Nom de domaine** — il n'en a pas. Option a : sous-domaine DuckDNS, gratuit, 5 minutes (recommandé pour démarrer). Option b : acheter un `.fr` (~7 €/an). Sans domaine, pas de HTTPS, donc **pas de géolocalisation testable sur son iPhone** | mise en ligne | ⏳ en attente de son choix |
-| 5 | **Trois secrets GitHub** `VPS_HOST`, `VPS_USER`, `VPS_CLE_PRIVEE`, plus une variable `CARBURANT_DOMAINE` | mise en ligne | ⏳ demandé le 24/11, le workflow est écrit et vert |
+| 3 | Ports 80 et 443 dans la *security list* du VCN Oracle | mise en ligne | ✅ fait le 25/11/2026 |
+| 4 | Nom de domaine | mise en ligne | ✅ `carburant.144-24-195-97.sslip.io`, gratuit et sans inscription. Un vrai `.fr` reste possible plus tard : une ligne à changer |
+| 5 | Trois secrets GitHub `VPS_HOST`, `VPS_USER`, `VPS_CLE_PRIVEE` | mise en ligne | ✅ fait le 25/11/2026 |
+| 8 | **Ouvrir le site sur son iPhone** et essayer « Ma position », en 4G et en wifi | confiance dans le parcours mobile réel | ⏳ demandé le 25/11 |
 | 6 | Compte healthchecks.io | Jalon 6 : alertes | 🔜 plus tard |
 | 7 | Compte PyPI + 2FA | Jalon 4 : `uvx prix-carburant-mcp` | 🔜 plus tard |
 
@@ -60,8 +58,7 @@ Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seui
 et C restent déclarées et visibles sur `/planche-de-style`. En changer coûte trois
 lignes dans `web/app/styles/tokens.css` plus le préchargement dans `nuxt.config.ts`.
 
-**Rien de tout cela ne bloque le Jalon 2**, qui commence maintenant. Cela ne bloque que
-la mise en ligne.
+**Rien de tout cela ne bloque le Jalon 2**, qui commence maintenant.
 
 ## Jalons
 Chaque jalon se termine par : critère de sortie vérifié, bilan à Baptiste, mise à jour de comprendre-le-projet.md.
@@ -129,11 +126,12 @@ planche de style produites et relues.
 - [x] ETL minimal : extract (export du flux v2) → raw → staging → `dim_station` + `fact_prix` (grain = changement de prix, idempotent) — 24/11/2026
 - [x] API : `/v1/stations/proches`, `/v1/geocode`, `/v1/sante` — 24/11/2026, p95 18,7 ms
 - [x] Web : accueil mobile (adresse ou position → liste triée par prix, prix façon totem) — 24/11/2026, captures dans `docs/captures/J1/`
-- [x] Déploiement sur le VPS, Caddy, HTTPS, collecte planifiée — écrit et vérifié en
-      local le 24/11/2026, images multi-architecture publiées sur GHCR, CI et workflow
-      de déploiement verts. **Mise en ligne en attente des trois actions de Baptiste.**
+- [x] Déploiement sur le VPS, Caddy, HTTPS, collecte planifiée — **en ligne le
+      25/11/2026** sur <https://carburant.144-24-195-97.sslip.io>
 
 Sortie : depuis un téléphone, l'URL publique → « le Prado, Marseille » → stations réelles avec prix et fraîcheur ; deux exécutions successives de l'ETL ne créent aucun doublon.
+**Atteinte et constatée le 25/11/2026**, le parcours étant rejoué contre la production
+par le déploiement lui-même. Reste le test sur l'iPhone réel de Baptiste.
 
 ### J2 — ETL complet
 - [ ] Toutes les règles de transformation (normalisation, aberrants, fraîcheur, ruptures, déduplication), testées
@@ -184,6 +182,33 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-25 — Le Jalon 1 est en ligne.**
+  <https://carburant.144-24-195-97.sslip.io>, en HTTPS, certificat Let's Encrypt
+  obtenu au premier essai. Le deploiement part d'un runner GitHub, installe Docker
+  sur le VPS, ecrit sa configuration, tire les images multi-architecture depuis GHCR,
+  applique les migrations, demarre la pile et **rejoue le parcours Playwright contre
+  le site en ligne**.
+  **La machine est enfin connue** : Ampere aarch64, Oracle Linux 9.8, 10 Go de RAM,
+  4 Go de swap deja present, 17 Go de disque libre. PostGIS est desormais la meme
+  image partout (imresamu/postgis:18-3.6-alpine, multi-architecture) : ecrire du SQL
+  contre 3.7 pour le deployer sur 3.6 etait un piege gratuit.
+  **Sept obstacles, tous diagnostiques par les journaux du deploiement :**
+  `/opt` appartient a root et `opc` ne pouvait pas y creer le repertoire ;
+  **`ssh-keyscan` faisait bannir le runner par fail2ban** -- il ouvre une connexion
+  par type de cle et les referme avant authentification, ce que fail2ban compte comme
+  un echec, et les connexions suivantes etaient jetees sans reponse, ce qui ressemblait
+  a une panne reseau (confirme en lisant la liste des bannis : une adresse Azure y
+  figurait) ; **nginx occupait le port 80** -- le VPS n'etait pas vide, le projet de
+  mini-jeux de Baptiste y tournait, decision prise avec lui de passer a Caddy seul ;
+  le certificat n'etait pas encore delivre quand l'essai depuis l'exterieur est passe.
+  **Verifie sur le site en ligne**, pas en local : 20 stations reelles autour du Prado,
+  triees par prix, chacune avec sa date ; aucune erreur de console ; `/v1/sante` au
+  vert ; et surtout les prix **bougent** -- 1,975 € « il y a 2 heures » la ou la veille
+  on lisait 1,990 € « il y a 23 heures ». Le collecteur tourne tout seul toutes les
+  quinze minutes.
+  Captures du site en ligne dans `docs/captures/production/`.
+  Reste a Baptiste le seul test que personne d'autre ne peut faire : son iPhone.
 
 - **2026-11-24 — Jalon 1, etape 6 : le deploiement.** Pile de production autonome
   (`compose.prod.yaml`) avec Caddy en reverse proxy, workflow GitHub Actions qui
