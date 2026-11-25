@@ -215,9 +215,22 @@ jobs:
           set -eu
           url='${{ vars.CARBURANT_SITE_URL || env.SITE_PAR_DEFAUT }}'
           # Depuis le runner, donc par le vrai chemin public : reseau, pare-feu,
-          # Caddy, et TLS le jour ou il y en aura.
-          code=$(curl -sS -o /tmp/accueil.html -w '%{http_code}' "$url/")
-          echo "GET $url/ -> $code"
+          # Caddy et TLS.
+          #
+          # Avec des reessais : au tout premier demarrage, Caddy est en train
+          # d'obtenir son certificat aupres de Let's Encrypt, ce qui prend de
+          # quelques secondes a une minute. Pendant ce temps la poignee de main TLS
+          # echoue, et le 25/11/2026 l'essai tombait sur un « tlsv1 alert internal
+          # error » qui ressemblait a une panne alors que tout allait bien.
+          code=000
+          for essai in $(seq 1 12); do
+            code=$(curl -sS -o /tmp/accueil.html -w '%{http_code}' --max-time 20 "$url/" 2>&1 \
+                   | tail -1) || code=000
+            case "$code" in
+              200) echo "GET $url/ -> 200 (essai $essai)"; break ;;
+              *) echo "Essai $essai : pas encore ($code), nouvelle tentative dans 15 s." ; sleep 15 ;;
+            esac
+          done
           test "$code" = 200
           grep -q 'Où faire le plein' /tmp/accueil.html
           sante=$(curl -sS "$url/v1/sante")

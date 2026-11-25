@@ -65,6 +65,11 @@ echo "/v1/sante -> $sante"
 accueil=$(compose exec -T caddy wget -qO- --server-response http://localhost/ 2>&1 | head -1 || true)
 echo "Caddy -> ${accueil:-pas de reponse}"
 
+titre "Journal de Caddy"
+# L'obtention du certificat se joue ici : une erreur ACME n'apparait nulle part
+# ailleurs, et de l'exterieur elle ressemble a une panne TLS incomprehensible.
+compose logs --since 3m --no-log-prefix caddy 2>&1 | tail -25
+
 titre "Etat final"
 compose ps --format 'table {{.Service}}\t{{.Status}}'
 
