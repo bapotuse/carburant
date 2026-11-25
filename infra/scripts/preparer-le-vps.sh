@@ -166,6 +166,18 @@ titre "Qui ecoute sur 80 et 443"
 # inconnu tenait le port 80 et faisait echouer le demarrage de Caddy.
 sudo ss -ltnp "( sport = :80 or sport = :443 )" 2>/dev/null | sed 's/^/  /' || true
 
+# Si ce n'est pas notre Caddy, on veut savoir ce que c'est avant d'y toucher : le
+# VPS peut deja heberger autre chose, et rien ne sera arrete sans le demander.
+if ! sudo ss -ltnp "( sport = :80 )" 2>/dev/null | grep -q .; then
+    echo "  Le port 80 est libre."
+elif ! sudo ss -ltnp "( sport = :80 )" 2>/dev/null | grep -q docker; then
+    echo "  Un service hors Docker tient le port 80. Ce qu'il sert :"
+    curl -sS -o /dev/null -w '    GET http://127.0.0.1/ -> %{http_code}\n' http://127.0.0.1/ || true
+    sudo nginx -T 2>/dev/null \
+        | grep -nE '^\s*(server_name|root|proxy_pass|listen|# configuration file)' \
+        | head -30 | sed 's/^/    /' || true
+fi
+
 # --------------------------------------------------------------- anti-force-brute
 titre "fail2ban"
 # Affiche a chaque deploiement, pour qu'un bannissement du runner se voie dans le
