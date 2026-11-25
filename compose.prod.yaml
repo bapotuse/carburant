@@ -14,10 +14,9 @@ name: carburant
 
 services:
   db:
-    # Choisie par le deploiement selon l'architecture du VPS : postgis/postgis ne
-    # publie pas d'image arm64 (verifie le 23/11/2026). Sur Ampere A1, la valeur est
-    # imresamu/postgis:18-3.6-alpine. Voir docs/decisions.md.
-    image: ${IMAGE_DB:-postgis/postgis:18-3.7}
+    # Multi-architecture, et la meme qu'en developpement : le VPS est un Ampere
+    # aarch64, pour lequel postgis/postgis ne publie pas d'image.
+    image: ${IMAGE_DB:-imresamu/postgis:18-3.6-alpine}
     container_name: carburant_db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-carburant}

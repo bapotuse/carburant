@@ -25,3 +25,10 @@ décision ou un accès.
 | 16 | `typescript-eslint` et TypeScript 7 | Le projet est sur TypeScript 6.0.3 parce que `typescript-eslint@8.73.0` refuse TypeScript 7 (`>=4.8.4 <6.1.0`). Ce n'est pas la dernière version. | Suivre https://github.com/typescript-eslint/typescript-eslint/issues/10940 et remonter à la ligne 7 dès qu'elle est supportée. | moi | 2026-11-23 |
 | 17 | Chiffres tabulaires de la paire typographique retenue | Vérifiés pour les six polices candidates. Une fois la paire choisie, les autres seront supprimées : il faudra reverifier que la paire retenue est bien celle testée. | Le test Playwright `les prix sont alignés au millième` tourne à chaque `make captures` et échouerait. | moi | 2026-11-23 |
 | 18 | Accessibilité automatisée (axe-core) | Aucune vérification axe n'est encore branchée : elle arrive au Jalon 5, avec les vraies pages. La planche de style n'a été relue qu'à l'œil et par les tests de contraste et de cibles tactiles. | Brancher `@axe-core/playwright` au Jalon 5, zéro violation sur chaque page. | moi | 2026-11-23 |
+
+- **[25/11/2026] Let's Encrypt delivre-t-il sans difficulte pour un sous-domaine
+  `sslip.io` ?** Le projet de mini-jeux de Baptiste utilise deja
+  `144-24-195-97.sslip.io`, en HTTP seulement. sslip.io est un service de DNS
+  generique partage : les limites de debit de Let's Encrypt s'y appliquent par
+  domaine enregistrable, et je n'ai pas verifie comment sslip.io y est traite. A
+  mesurer en demandant reellement un certificat. Repli : DuckDNS, ou un vrai `.fr`.

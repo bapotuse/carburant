@@ -4,10 +4,14 @@ name: carburant
 
 services:
   db:
-    # amd64 uniquement : postgis/postgis ne publie pas d'image arm64 (verifie le
-    # 23/11/2026, y compris sur les tags du jour). Sur un VPS aarch64, la production
-    # utilise imresamu/postgis:18-3.6-alpine -- voir docs/decisions.md.
-    image: postgis/postgis:18-3.7
+    # La meme image qu'en production, pas une version proche.
+    #
+    # Le VPS est un Ampere aarch64 (releve le 25/11/2026), et postgis/postgis ne
+    # publie pas d'image arm64. imresamu/postgis est multi-architecture, maintenu
+    # par le mainteneur des images PostGIS officielles et reconstruit
+    # quotidiennement. L'utiliser des deux cotes evite d'ecrire du SQL contre
+    # PostGIS 3.7 pour le deployer sur 3.6.
+    image: ${IMAGE_DB:-imresamu/postgis:18-3.6-alpine}
     container_name: carburant_db
     # Jamais de `ports:` ici : la base n'est joignable que depuis le reseau Docker.
     environment:

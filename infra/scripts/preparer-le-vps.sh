@@ -120,15 +120,12 @@ else
 fi
 echo "Site : $SITE_URL  (Caddy ecoutera sur « $domaine »)"
 
-# postgis/postgis ne publie pas d'image arm64 (verifie le 23/11/2026). Sur une
-# instance Ampere A1, on passe par imresamu/postgis, maintenu par le mainteneur des
-# images PostGIS officielles et reconstruit quotidiennement.
-if [ "$architecture" = "aarch64" ]; then
-    image_db="imresamu/postgis:18-3.6-alpine"
-else
-    image_db="postgis/postgis:18-3.7"
-fi
-echo "Image de la base : $image_db"
+# La meme image qu'en developpement, quelle que soit l'architecture : une base de
+# production sur PostGIS 3.6 et un developpement sur 3.7, c'est du SQL ecrit contre
+# une version et execute contre une autre. imresamu/postgis est multi-architecture
+# (le VPS est un Ampere aarch64, pour lequel postgis/postgis ne publie rien).
+image_db="imresamu/postgis:18-3.6-alpine"
+echo "Image de la base : $image_db (architecture : $architecture)"
 
 cat > .env <<FIN
 # Genere par infra/scripts/preparer-le-vps.sh. Reecrit a chaque deploiement, sauf

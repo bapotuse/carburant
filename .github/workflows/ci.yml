@@ -21,8 +21,9 @@ jobs:
     services:
       db:
         # Les tests d'integration ont besoin d'un vrai PostGIS : une base simulee
-        # ne dirait rien de ST_DWithin ni du partitionnement.
-        image: postgis/postgis:18-3.7
+        # ne dirait rien de ST_DWithin ni du partitionnement. Et la meme image que
+        # le developpement et la production, pour que les trois disent la meme chose.
+        image: imresamu/postgis:18-3.6-alpine
         env:
           POSTGRES_USER: carburant
           POSTGRES_PASSWORD: carburant-ci
