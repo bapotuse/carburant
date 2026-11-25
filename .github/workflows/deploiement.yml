@@ -117,7 +117,10 @@ jobs:
         run: |
           set -eu
           cible="$UTILISATEUR@$HOTE"
-          ssh -i ~/.ssh/deploiement "$cible" 'mkdir -p /opt/carburant/infra/caddy'
+          # /opt appartient a root : il faut sudo pour y creer le repertoire, puis
+          # le donner a l'utilisateur pour que scp puisse y ecrire sans sudo.
+          ssh -i ~/.ssh/deploiement "$cible" \
+            'sudo mkdir -p /opt/carburant/infra/caddy && sudo chown -R "$USER:$USER" /opt/carburant'
           scp -i ~/.ssh/deploiement \
             compose.prod.yaml infra/scripts/sur-le-vps.sh infra/scripts/preparer-le-vps.sh \
             "$cible:/opt/carburant/"
