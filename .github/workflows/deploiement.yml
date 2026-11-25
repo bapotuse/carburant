@@ -242,3 +242,49 @@ jobs:
         run: |
           ssh -O exit deploiement-carburant 2>/dev/null || true
           rm -f ~/.ssh/deploiement ~/.ssh/config ~/.ssh/cm-*
+
+  verification:
+    name: Le site en ligne, dans un vrai navigateur
+    needs: deploiement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Installer les dependances
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Installer Chromium
+        working-directory: web
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Le parcours « chercher depuis un telephone », sur le site en ligne
+        # Le meme test que celui qui tourne en local, mais contre la production :
+        # vrai DNS, vrai certificat, vraie base. Un deploiement qui repond 200 sur
+        # la page d'accueil peut tres bien avoir un site ou plus rien ne fonctionne
+        # -- c'est exactement ce qui s'est produit le 24/11/2026 avec une politique
+        # de securite trop stricte.
+        working-directory: web
+        env:
+          BASE_URL: ${{ vars.CARBURANT_SITE_URL || env.SITE_PAR_DEFAUT }}
+          JALON: production
+        run: pnpm exec playwright test --config playwright.captures.config.ts --trace off accueil.spec
+
+      - name: Garder les captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures-production
+          path: docs/captures/production/
+          retention-days: 14
+          if-no-files-found: warn
