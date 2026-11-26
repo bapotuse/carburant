@@ -1,0 +1,78 @@
+name: Reconnaissance OpenStreetMap
+
+# Interroge l'API Overpass et decrit ce qu'elle rend, sans rien charger.
+#
+# Pourquoi un workflow pour cela : `overpass-api.de` est injoignable depuis
+# l'environnement de developpement de la session (le tunnel vers le proxy sortant se
+# ferme en cours d'echange, quatre fois sur quatre -- voir docs/a-verifier.md). Or
+# `CLAUDE.md` interdit d'ecrire du code contre une API sans l'avoir interrogee pour
+# de vrai, et cette regle a deja evite une erreur sur l'API de l'ADEME. Le runner
+# GitHub, lui, a un acces reseau sans restriction.
+#
+# A supprimer une fois la reconnaissance faite et consignee dans
+# docs/reconnaissance.md.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  decrire:
+    name: Que rend Overpass pour les stations francaises ?
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compter et decrire les stations-service de France
+        run: |
+          set -euo pipefail
+          cat > requete.overpassql <<'FIN'
+          [out:json][timeout:600];
+          area["ISO3166-1"="FR"][admin_level=2]->.fr;
+          nwr["amenity"="fuel"](area.fr);
+          out center tags;
+          FIN
+          echo "Requete envoyee :"; cat requete.overpassql
+
+          curl -sS --fail-with-body \
+            --data-urlencode "data@requete.overpassql" \
+            -A "carburant/0.1 reconnaissance (+https://github.com/bapotuse/carburant)" \
+            -o france.json \
+            https://overpass-api.de/api/interpreter
+
+          echo "Reponse : $(stat -c %s france.json) octets"
+
+          python3 - <<'FIN'
+          import collections, json
+
+          with open("france.json", encoding="utf-8") as f:
+              donnees = json.load(f)
+          elements = donnees["elements"]
+          print(f"\n=== {len(elements)} elements ===")
+          print("par type :", dict(collections.Counter(e["type"] for e in elements)))
+
+          # Quelles cles de tags, et combien d'elements les portent ? C'est ce qui
+          # decide de ce qu'on peut rapprocher.
+          cles = collections.Counter()
+          for e in elements:
+              cles.update(e.get("tags", {}).keys())
+          print("\n=== 25 tags les plus frequents ===")
+          for cle, n in cles.most_common(25):
+              print(f"  {n:6d}  {100*n/len(elements):5.1f} %  {cle}")
+
+          for cle in ("brand", "name", "operator", "brand:wikidata"):
+              porteurs = [e for e in elements if cle in e.get("tags", {})]
+              print(f"\n=== {cle} : {len(porteurs)} elements ({100*len(porteurs)/len(elements):.1f} %) ===")
+              valeurs = collections.Counter(e["tags"][cle] for e in porteurs)
+              for valeur, n in valeurs.most_common(15):
+                  print(f"  {n:6d}  {valeur}")
+
+          # Un element sur deux est-il un `node` ou un `way` ? Les `way` n'ont pas de
+          # lat/lon propres : `out center` leur en donne un. Verifions-le.
+          sans_position = [
+              e for e in elements
+              if "lat" not in e and "center" not in e
+          ]
+          print(f"\n=== sans position exploitable : {len(sans_position)} ===")
+
+          print("\n=== trois exemples complets ===")
+          for e in elements[:3]:
+              print(json.dumps(e, ensure_ascii=False)[:600])
+          FIN
