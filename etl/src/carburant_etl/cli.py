@@ -144,18 +144,48 @@ def _run(rejouer: Path | None) -> int:
 
 
 def _backfill(annee: int) -> int:
-    """Charge une annee d archive dans l historique."""
+    """Charge une annee d archive dans l historique.
+
+    Comme `etl run`, l amorcage ouvre une execution dans `meta.execution_etl` et la
+    cloture avec ses comptes : une execution qui ne laisse pas de trace est une panne
+    invisible, et l audit du 26/11/2026 a trouve 5,9 millions de prix charges sans
+    une seule ligne de journal.
+    """
     from carburant_etl.chargement.backfill import amorcer
     from carburant_etl.chargement.staging import ouvrir
+    from carburant_etl.pipeline import cloturer_execution, demarrer_execution
 
     config = Config.depuis_environnement()
     connexion = ouvrir(config.database_url)
     try:
-        resultat = amorcer(
+        execution_id = demarrer_execution(connexion, f"backfill {annee}")
+        try:
+            resultat = amorcer(
+                connexion,
+                annee,
+                repertoire=config.repertoire_brut,
+                user_agent=config.user_agent,
+            )
+        except Exception as erreur:
+            cloturer_execution(
+                connexion,
+                execution_id,
+                statut="echec",
+                erreur=f"{type(erreur).__name__}: {erreur}",
+            )
+            raise
+        cloturer_execution(
             connexion,
-            annee,
-            repertoire=config.repertoire_brut,
-            user_agent=config.user_agent,
+            execution_id,
+            statut="succes",
+            lignes_par_etape={
+                "stations_lues": resultat.stations_lues,
+                "stations_creees": resultat.stations_creees,
+                "prix_lus": resultat.prix_lus,
+                "prix_inseres": resultat.prix_inseres,
+                "prix_deja_connus": resultat.prix_deja_connus,
+            },
+            avertissements=[{"rejets": resultat.rejets}],
         )
     finally:
         connexion.close()
@@ -184,22 +214,38 @@ def _refresh(jours: int | None, annee: int | None) -> int:
 
     from carburant_etl.chargement import agregats
     from carburant_etl.chargement.staging import ouvrir
+    from carburant_etl.pipeline import cloturer_execution, demarrer_execution
 
     connexion = ouvrir(Config.depuis_environnement().database_url)
     try:
-        if annee is not None:
-            lignes = agregats.calculer_periode(
-                connexion, dt.date(annee, 1, 1), dt.date(annee, 12, 31)
+        execution_id = demarrer_execution(
+            connexion, f"refresh {annee}" if annee is not None else "refresh"
+        )
+        try:
+            if annee is not None:
+                lignes = agregats.calculer_periode(
+                    connexion, dt.date(annee, 1, 1), dt.date(annee, 12, 31)
+                )
+            else:
+                resultat = agregats.rafraichir(connexion, jours=jours)
+                lignes = resultat.lignes_agregat
+        except Exception as erreur:
+            cloturer_execution(
+                connexion,
+                execution_id,
+                statut="echec",
+                erreur=f"{type(erreur).__name__}: {erreur}",
             )
+            raise
+        cloturer_execution(
+            connexion, execution_id, statut="succes", lignes_par_etape={"agregats": lignes}
+        )
+        if annee is not None:
             print(f"annee {annee} : {lignes} ligne(s) d agregat.")
             return 0
-        resultat = agregats.rafraichir(connexion, jours=jours)
     finally:
         connexion.close()
-    print(
-        f"reference departementale rafraichie ; "
-        f"{resultat.lignes_agregat} ligne(s) d agregat sur {resultat.jours} jour(s)."
-    )
+    print(f"reference departementale rafraichie ; {lignes} ligne(s) d agregat.")
     return 0
 
 

@@ -169,10 +169,23 @@ Flux aplati au format long, une ligne par station × carburant : prix, date de m
 |---|---|---|---|
 | frais | ≤ 48 h | 39,5 % | affiché normalement |
 | récent | 48 h → 7 j | 81,9 % cumulé | affiché, date discrète |
-| ancien | 7 j → 30 j | 96,8 % cumulé | avertissement visible, **conservé** dans les recherches, exclu des classements et des moyennes |
+| ancien | 7 j → 30 j | 96,8 % cumulé | avertissement visible, **conservé** dans les recherches et dans les agrégats, exclu des classements |
 | périmé | > 30 j | 3,2 % | exclu des recherches, visible sur la fiche avec sa date |
 
   Dans tous les cas, **la date de mise à jour est affichée** : jamais un prix nu.
+
+  **[corrigé 26/11/2026] Les prix « anciens » entrent dans les agrégats.** La règle
+  initiale les excluait « des classements et des moyennes » ; l'audit indépendant a
+  relevé que le code les inclut. C'est le code qui a raison, et la règle est corrigée.
+  Raison : un agrégat porte sur les prix **en vigueur** un jour donné, et une station
+  qui n'a pas bougé son prix depuis dix jours vend bel et bien à ce prix. Les exclure
+  reviendrait à ne moyenner que les stations qui changent souvent leurs prix — très
+  exactement le biais que l'agrégat existe pour éviter. Ils pèsent lourd : 12,6 % des
+  prix du gazole, 23,9 % du SP95, 28,3 % de l'E85.
+  Effet mesuré sur le chiffre publié du 24/11/2026 : les inclure change la moyenne de
+  **1,1 à 1,3 centime** (gazole 2,1151 contre 2,1039 ; SP95 2,0202 contre 2,0072).
+  Les **classements**, eux, les excluent toujours : être le moins cher avec un prix de
+  trois semaines n'a pas de sens.
 - Ruptures : un carburant en rupture est exclu des recherches et affiché comme tel sur la fiche.
 - Déduplication : un même `(station, carburant, maj)` donne une seule ligne ; même `maj` avec un prix différent : on garde la dernière observation et on journalise.
 - Station absente du flux : `active = false` après N collectes manquées, jamais supprimée.

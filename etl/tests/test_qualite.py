@@ -468,3 +468,101 @@ def test_une_periode_a_l_envers_est_refusee(base: str) -> None:
             agregats.calculer_periode(connexion, dt.date(2026, 3, 5), dt.date(2026, 3, 1))
     finally:
         connexion.close()
+
+
+@sans_base
+def test_les_deux_chemins_donnent_le_meme_resultat(base: str) -> None:
+    """Le calcul jour par jour et le calcul en masse doivent s accorder.
+
+    C'est le test qui manquait. L'audit du 26/11/2026 a trouve que le chemin en masse
+    accordait trente et un jours de validite a un prix la ou le chemin jour par jour
+    en accordait trente : 23 prix de gazole d'ecart sur le seul 15 mars 2007, et le
+    meme jour recalcule par l'autre chemin changeait de valeur.
+    """
+    jour = dt.date(2026, 3, 20)
+    # **Exactement trente jours avant le jour vise.** C'est la seule date qui
+    # distingue les deux versions : un prix du 18 fevrier vaut jusqu'au 19 mars avec
+    # une fenetre de trente jours (18 fevrier inclus), et jusqu'au 20 mars avec la
+    # fenetre de trente et un jours qu'avait le chemin en masse. Un premier essai de
+    # ce test avait pris le 19 fevrier -- a vingt-neuf jours -- et passait donc avec
+    # le bug en place : un test qui n'echoue pas contre le code fautif ne prouve rien.
+    limite = dt.datetime(2026, 2, 18, 10, tzinfo=PARIS)
+    recent = dt.datetime(2026, 3, 18, 10, tzinfo=PARIS)
+    stations, lignes = un_departement(combien=6, prix_eur=1.700, instant=recent)
+    anciennes, prix_anciens = un_departement(
+        combien=6, prix_eur=1.500, instant=limite, premier_id=13009001
+    )
+
+    connexion = ouvrir(base)
+    try:
+        charger_tout(connexion, limite, anciennes, prix_anciens)
+        charger_tout(connexion, recent, stations, lignes, sha="b" * 64)
+
+        agregats.calculer_periode(connexion, jour, jour)
+        with connexion.cursor() as curseur:
+            curseur.execute(
+                "SELECT stations, exclus, prix_min, prix_median, prix_max "
+                "FROM marts.agregat_prix_jour "
+                "WHERE jour = %s AND dimension = 'france' AND carburant = 'gazole'",
+                (jour,),
+            )
+            en_masse = curseur.fetchone()
+
+        with connexion.transaction(), connexion.cursor() as curseur:
+            curseur.execute("DELETE FROM marts.agregat_prix_jour")
+        agregats.calculer_agregats(connexion, [jour])
+        with connexion.cursor() as curseur:
+            curseur.execute(
+                "SELECT stations, exclus, prix_min, prix_median, prix_max "
+                "FROM marts.agregat_prix_jour "
+                "WHERE jour = %s AND dimension = 'france' AND carburant = 'gazole'",
+                (jour,),
+            )
+            jour_par_jour = curseur.fetchone()
+    finally:
+        connexion.close()
+
+    assert en_masse == jour_par_jour, (
+        f"les deux chemins divergent : en masse {en_masse}, jour par jour {jour_par_jour}"
+    )
+
+
+@sans_base
+@pytest.mark.parametrize(
+    ("mad", "ecart"),
+    [
+        (0.06, 0.30),  # pile au seuil : 5 x 0,06 = 0,30, donc pas suspect
+        (0.06, 0.31),  # juste au-dessus
+        (0.0, 0.25),  # plancher : 5 x 0,05 = 0,25, pile au seuil
+        (0.0, 0.26),
+        (0.12, 0.60),
+        (0.12, 0.61),
+    ],
+)
+def test_sql_et_python_jugent_pareil_au_seuil_exact(base: str, mad: float, ecart: float) -> None:
+    """Au seuil **exact**, pas seulement a ses abords.
+
+    L'audit du 26/11/2026 a trouve deux divergences sur 4 060 cas tires au sort,
+    toutes deux pile au seuil : `abs(1.8 - 1.5)` vaut `0.30000000000000004` en
+    flottant et `0.30` en `numeric`. Le test precedent ne regardait qu'a 0,04 du
+    seuil et ne pouvait pas le voir. Le code Python calcule desormais en `Decimal`.
+    """
+    mediane, stations = 1.500, 10
+    connexion = ouvrir(base)
+    try:
+        with connexion.cursor() as curseur:
+            curseur.execute(
+                "SELECT marts.est_suspect(%s::numeric, %s::numeric, %s::numeric, %s::integer)",
+                (round(mediane + ecart, 10), mediane, mad, stations),
+            )
+            ligne = curseur.fetchone()
+    finally:
+        connexion.close()
+    assert ligne is not None
+    cote_sql = bool(ligne[0])
+    cote_python = aberrants.est_suspect(
+        round(mediane + ecart, 10), mediane, mad, nombre_de_stations=stations
+    )
+    assert cote_sql == cote_python, (
+        f"divergence a mad={mad}, ecart={ecart} : SQL {cote_sql}, Python {cote_python}"
+    )

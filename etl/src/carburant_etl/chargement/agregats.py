@@ -11,11 +11,13 @@ changement anterieur a la fin du jour, a condition qu'il ne soit pas perime.
 Sont ecartes du calcul, mais comptes :
 
 - les prix **perimes** (plus de 30 jours sans changement) : ils ne disent plus rien
-  du prix pratique ;
-- les carburants en **rupture** : la station ne le vend pas ce jour-la ;
+  du prix pratique. Ils sont ecartes **avant** le calcul, par la fenetre de lecture,
+  et ne sont donc pas comptes dans `exclus` ;
+- les carburants en **rupture** : la station ne le vend pas ce jour-la. Ecartes de la
+  meme facon, et pas comptes non plus ;
 - les prix **atypiques** au sens de `marts.est_suspect` : ce sont le plus souvent de
   vrais prix eleves (L'Ile-d'Yeu, Val-d'Isere), mais ils tirent une moyenne
-  departementale sans rien dire du marche.
+  departementale sans rien dire du marche. **Ce sont les seuls que compte `exclus`.**
 
 La mediane de reference et l'ecart median servant a juger l'atypie sont calcules
 **sur le jour considere**, pas sur aujourd'hui : un agregat de 2019 se juge avec les
@@ -288,8 +290,14 @@ validites AS (
            greatest(c.jour_debut, b.premier) AS du,
            least(
                coalesce((c.suivant AT TIME ZONE 'Europe/Paris')::date - 1,
-                        c.jour_debut + %(fenetre)s),
-               c.jour_debut + %(fenetre)s,
+                        c.jour_debut + %(fenetre)s - 1),
+               -- `- 1` : un prix du jour D vaut pour D..D+29, soit trente jours au
+               -- total, D compris. Sans lui, la validite courait sur trente et un
+               -- jours et ce chemin ne donnait pas le meme resultat que le calcul
+               -- jour par jour -- 23 prix de gazole d'ecart sur le 15 mars 2007.
+               -- Trouve par l'audit du 26/11/2026, verrouille par
+               -- `test_les_deux_chemins_donnent_le_meme_resultat`.
+               c.jour_debut + %(fenetre)s - 1,
                b.dernier
            ) AS au
       FROM changements c, bornes b

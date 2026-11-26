@@ -41,3 +41,38 @@ décision ou un accès.
   OpenStreetMap ne peuvent pas être mises au point ici contre la vraie source.
   Elles le seront depuis le VPS, dont le conteneur a un accès réseau normal, comme
   cela a été fait pour le déploiement. À reverifier si la politique change.
+
+### Relevés par l'audit indépendant du 26/11/2026
+
+- **Le plancher de MAD en euros absolus est quasi inerte sur l'historique ancien.**
+  Mesuré sur toute l'année 2007 : **885 prix signalés sur 4 547 129, soit 0,019 %**,
+  contre les 0,4 à 2,5 % annoncés. Avec des prix autour de 1 €, le seuil de
+  5 × 0,05 = 0,25 € dépasse l'amplitude nationale du jour (gazole le 15/03/2007 :
+  min 0,966, max 1,200). À l'autre bout, le SP98 atteint **3,47 %** sur la base vive,
+  au-dessus de la borne haute annoncée.
+  → Un plancher **relatif** (de l'ordre de 2,5 % de la médiane) corrigerait les deux
+  bouts. À recalibrer **par la mesure**, pas à l'intuition, avant les pages de
+  tendances historiques du Jalon 5. Ne pas changer la règle sans refaire les mesures
+  de `reconnaissance.md` § 1.10.
+- **Deux définitions concurrentes de « prix atypique » coexistent, par conception.**
+  `marts.reference_departementale` juge sur les prix frais et récents du moment (c'est
+  ce que lit l'API) ; les agrégats recalculent la médiane du jour considéré (un jour de
+  2019 doit se juger avec les prix de 2019). Désaccord mesuré le 24/11/2026 :
+  **176 prix sur 32 148, soit 0,55 %**, changent de verdict. Le site peut donc signaler
+  un prix que l'agrégat a compté comme normal. C'est défendable mais il faut le dire
+  sur la page « méthodologie ».
+- **Les trente premiers jours d'une période amorcée sont calculés sur un historique
+  incomplet** : 2007-01-01 → 186 stations, 2007-01-02 → 1 240, 2007-02-15 → 5 853. Une
+  courbe de tendance démarrerait donc sur une marche. Atténuation : charger les années
+  dans l'ordre croissant, auquel cas seul le tout début de 2007 est concerné. La
+  colonne `stations` permet de les repérer et le commentaire de la table le dit.
+- **La Corse est absente de la dimension départementale de l'historique** : 159
+  stations dont le code postal en `20xxx` ne dit pas s'il s'agit de 2A ou 2B. Elles
+  comptent dans l'agrégat national mais dans aucun agrégat départemental, et ne sont
+  **jamais jugées atypiques** (la règle renvoie `false` quand la médiane est inconnue).
+  Le 15/03/2007 : 48 prix de gazole, moyenne 1,115 contre 1,045 ailleurs.
+- **740 ruptures sans type sont invisibles en base.** Le flux publie 1 021 lignes
+  `rupture` dont l'attribut `type` est vide ; data.economie met alors les champs plats
+  correspondants à `null`, et l'ETL ne peut pas les voir. Aucun prix n'est concerné :
+  l'effet se limite à l'information de disponibilité (« ne vend pas ce carburant »
+  plutôt que « en rupture »). Cause en amont, rien à corriger chez nous.

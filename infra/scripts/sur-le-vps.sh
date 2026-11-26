@@ -47,6 +47,19 @@ titre "Migrations"
 # pas d'une migration qui depende de son bon demarrage.
 compose run --rm --no-deps etl etl migrate
 
+titre "Facteurs d emission"
+# Les facteurs de la Base Carbone ne changent qu'une fois par an, mais ils doivent
+# bien etre charges une premiere fois : l'audit du 26/11/2026 a trouve la table vide
+# partout. Cinq requetes a l'ADEME par deploiement, c'est negligeable.
+#
+# Un echec ici n'arrete pas le deploiement : les facteurs sont une donnee de
+# reference, pas le chemin critique du site. Mais il se voit dans le journal.
+if compose run --rm --no-deps etl etl facteurs; then
+    echo "Facteurs d emission a jour."
+else
+    echo "::warning::Les facteurs d emission n ont pas pu etre recuperes. Le site reste servi ; relancer \`etl facteurs\` plus tard."
+fi
+
 titre "Demarrage de la pile"
 # `--wait` attend que les healthchecks passent au vert, et echoue sinon : sans cela,
 # un deploiement casse se terminerait en « succes ».

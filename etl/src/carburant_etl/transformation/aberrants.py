@@ -20,6 +20,7 @@ elle signale 0,4 a 2,5 % des prix. Mesures dans docs/reconnaissance.md section 1
 from __future__ import annotations
 
 import statistics as stats
+from decimal import Decimal
 from typing import Final
 
 from carburant_etl.carburants import CodeCarburant, est_dans_les_bornes
@@ -37,6 +38,15 @@ MIN_STATIONS_DEPARTEMENT: Final = 5
 def dans_les_bornes(code: CodeCarburant, prix: float) -> bool:
     """Le prix est-il un prix plausible pour ce carburant ? Sinon : rejete et compte."""
     return est_dans_les_bornes(code, prix)
+
+
+def _decimal(valeur: float) -> Decimal:
+    """Un flottant, lu comme PostgreSQL lirait le litteral correspondant.
+
+    `Decimal(str(x))` et non `Decimal(x)` : le second garderait l'approximation
+    binaire du flottant, ce qu'on cherche justement a eviter.
+    """
+    return Decimal(str(valeur))
 
 
 def mediane_et_mad(prix: list[float]) -> tuple[float, float]:
@@ -63,11 +73,19 @@ def est_suspect(
 
     Renvoie False si le departement compte moins de `MIN_STATIONS_DEPARTEMENT`
     stations pour ce carburant : on ne juge pas un prix sur trois voisins.
+
+    **Le calcul se fait en `Decimal`, pas en flottant**, pour rendre exactement le
+    meme verdict que `marts.est_suspect`, qui travaille en `numeric`. Mesure de
+    l'audit du 26/11/2026 : sur 4 060 cas tires au sort, deux divergeaient, tous
+    deux pile au seuil -- `abs(1.8 - 1.5)` vaut `0.30000000000000004` en flottant et
+    `0.30` en `numeric`, pour un seuil de `5 x 0.06 = 0.30`. Une regle dont la base
+    et le code ne donnent pas le meme verdict n'est pas une regle.
     """
     if nombre_de_stations < MIN_STATIONS_DEPARTEMENT:
         return False
-    echelle = max(mad_departement, PLANCHER_MAD)
-    return abs(prix - mediane_departement) > FACTEUR_MAD * echelle
+    ecart = abs(_decimal(prix) - _decimal(mediane_departement))
+    echelle = max(_decimal(mad_departement), _decimal(PLANCHER_MAD))
+    return ecart > _decimal(FACTEUR_MAD) * echelle
 
 
 def ecart_en_mad(prix: float, mediane_departement: float, mad_departement: float) -> float:
@@ -76,4 +94,5 @@ def ecart_en_mad(prix: float, mediane_departement: float, mad_departement: float
     Stocke a cote du prix suspect : il explique *pourquoi* il a ete signale, ce qui
     rend le signalement verifiable plutot que magique.
     """
-    return abs(prix - mediane_departement) / max(mad_departement, PLANCHER_MAD)
+    ecart = abs(_decimal(prix) - _decimal(mediane_departement))
+    return float(ecart / max(_decimal(mad_departement), _decimal(PLANCHER_MAD)))

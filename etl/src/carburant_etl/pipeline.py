@@ -220,7 +220,10 @@ def executer(config: Config, *, rejouer: Path | None = None) -> Resultat:
             # controles : le controle des prix atypiques lit la reference, et une
             # reference d'il y a quinze minutes jugerait les prix d'il y a quinze
             # minutes.
-            refresh = agregats.rafraichir(connexion, jours=1)
+            # Deux jours et non un : une collecte a 00 h 02 voit des changements de
+            # la veille, et l'agregat de la veille serait fige sur son avant-dernier
+            # etat. Releve par l'audit du 26/11/2026.
+            refresh = agregats.rafraichir(connexion, jours=2)
 
             # Les controles tournent **apres** le chargement, et ne l'annulent pas.
             # Une collecte ou le nombre de stations a bouge de 11 % reste une
@@ -236,7 +239,11 @@ def executer(config: Config, *, rejouer: Path | None = None) -> Resultat:
                 {"champ": champ, "motif": motif, "occurrences": nombre, "exemple": exemple}
                 for champ, motif, nombre, exemple in aplati.rejets.lignes()
             ]
-            avertissements += [v.en_dictionnaire() for v in verdicts if not v.ok]
+            # **Tous** les verdicts, pas seulement les echecs. Le critere de sortie
+            # du Jalon 2 demande « le rapport qualite de la derniere execution » :
+            # sans les verts, on lit seulement qu'aucun controle n'a echoue, sans
+            # savoir lesquels ont tourne. Releve par l'audit du 26/11/2026.
+            avertissements += [v.en_dictionnaire() for v in verdicts]
 
             cloturer_execution(
                 connexion,
