@@ -32,3 +32,12 @@ décision ou un accès.
   depuis l'exterieur. A surveiller tout de meme au renouvellement, sslip.io etant un
   domaine partage soumis aux limites de debit de Let's Encrypt. Repli connu :
   DuckDNS, ou un vrai `.fr`.
+
+- **[26/11/2026] `overpass-api.de` est injoignable depuis l'environnement de
+  développement.** L'hôte a bien été ajouté à la politique réseau, mais chaque
+  tentative meurt sur `ws_closed_mid_exchange` : le tunnel vers le proxy sortant se
+  ferme avant la fin de l'échange, quatre fois sur quatre. Ce n'est ni un refus de
+  politique (403/407) ni un problème de certificat. Conséquence : les enseignes
+  OpenStreetMap ne peuvent pas être mises au point ici contre la vraie source.
+  Elles le seront depuis le VPS, dont le conteneur a un accès réseau normal, comme
+  cela a été fait pour le déploiement. À reverifier si la politique change.

@@ -254,3 +254,157 @@ def rafraichir(
     lignes = calculer_agregats(connexion, a_calculer)
     journal.info("agregats : %d jour(s), %d ligne(s)", len(a_calculer), lignes)
     return ResultatRefresh(jours=len(a_calculer), lignes_agregat=lignes, reference_rafraichie=True)
+
+
+# --------------------------------------------------------------------- en masse
+#
+# Recalculer les agregats jour par jour convient apres une collecte -- un ou deux
+# jours a refaire. Sur dix-neuf ans d'historique, c'est environ 7 000 requetes :
+# intenable. Cette variante calcule une periode entiere en une passe.
+#
+# L'idee : au lieu de demander « quels prix etaient en vigueur le 3 mars ? » pour
+# chaque jour, on demande a chaque changement de prix « pendant combien de jours
+# as-tu ete en vigueur ? » et on le deplie. Un changement vaut jusqu'au suivant pour
+# la meme station et le meme carburant -- c'est ce que donne `lead(...) OVER` -- et
+# au plus trente jours, au-dela desquels le prix est perime.
+_AGREGER_EN_MASSE = """
+WITH bornes AS (
+    SELECT %(debut)s::date AS premier, %(fin)s::date AS dernier
+),
+changements AS (
+    SELECT p.station_id, p.carburant, p.prix,
+           (p.maj AT TIME ZONE 'Europe/Paris')::date AS jour_debut,
+           lead(p.maj) OVER (
+               PARTITION BY p.station_id, p.carburant ORDER BY p.maj
+           ) AS suivant
+      FROM marts.fact_prix p, bornes b
+     -- La fenetre de trente jours en amont ramene les prix encore en vigueur au
+     -- premier jour demande, sans balayer tout l'historique.
+     WHERE p.maj >= (b.premier - %(fenetre)s)::timestamptz
+       AND p.maj <  (b.dernier + 1)::timestamptz
+),
+validites AS (
+    SELECT c.station_id, c.carburant, c.prix,
+           greatest(c.jour_debut, b.premier) AS du,
+           least(
+               coalesce((c.suivant AT TIME ZONE 'Europe/Paris')::date - 1,
+                        c.jour_debut + %(fenetre)s),
+               c.jour_debut + %(fenetre)s,
+               b.dernier
+           ) AS au
+      FROM changements c, bornes b
+),
+en_vigueur AS (
+    SELECT v.station_id, v.carburant, v.prix, j::date AS jour
+      FROM validites v,
+           LATERAL generate_series(v.du, v.au, interval '1 day') j
+     WHERE v.au >= v.du
+),
+vendus AS (
+    SELECT e.jour, e.carburant, e.prix, s.code_departement, s.autoroute
+      FROM en_vigueur e
+      JOIN marts.dim_station s ON s.id = e.station_id
+     WHERE NOT EXISTS (
+               SELECT 1 FROM marts.rupture r
+                WHERE r.station_id = e.station_id AND r.carburant = e.carburant
+           )
+),
+medianes AS (
+    SELECT jour, code_departement, carburant,
+           count(*)::integer AS stations,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY prix)::numeric AS mediane
+      FROM vendus
+     WHERE code_departement IS NOT NULL
+     GROUP BY 1, 2, 3
+),
+dispersion AS (
+    SELECT m.jour, m.code_departement, m.carburant, m.stations, m.mediane,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY abs(v.prix - m.mediane))::numeric AS mad
+      FROM medianes m
+      JOIN vendus v
+        ON v.jour = m.jour
+       AND v.code_departement = m.code_departement
+       AND v.carburant = m.carburant
+     GROUP BY 1, 2, 3, 4, 5
+),
+juges AS (
+    SELECT v.jour, v.carburant, v.prix, v.code_departement, v.autoroute,
+           marts.est_suspect(v.prix, d.mediane, d.mad, d.stations) AS suspect
+      FROM vendus v
+      LEFT JOIN dispersion d
+        ON d.jour = v.jour
+       AND d.code_departement = v.code_departement
+       AND d.carburant = v.carburant
+)
+INSERT INTO marts.agregat_prix_jour
+    (jour, carburant, dimension, valeur, stations, exclus,
+     prix_min, prix_median, prix_moyen, prix_max, calcule_le)
+SELECT * FROM (
+    SELECT jour, carburant, 'france', '',
+           count(*) FILTER (WHERE NOT suspect)::integer,
+           count(*) FILTER (WHERE suspect)::integer,
+           min(prix) FILTER (WHERE NOT suspect),
+           (percentile_cont(0.5) WITHIN GROUP (ORDER BY prix)
+                FILTER (WHERE NOT suspect))::numeric(5,3),
+           round(avg(prix) FILTER (WHERE NOT suspect), 3),
+           max(prix) FILTER (WHERE NOT suspect),
+           now()
+      FROM juges GROUP BY jour, carburant
+    UNION ALL
+    SELECT jour, carburant, 'departement', code_departement,
+           count(*) FILTER (WHERE NOT suspect)::integer,
+           count(*) FILTER (WHERE suspect)::integer,
+           min(prix) FILTER (WHERE NOT suspect),
+           (percentile_cont(0.5) WITHIN GROUP (ORDER BY prix)
+                FILTER (WHERE NOT suspect))::numeric(5,3),
+           round(avg(prix) FILTER (WHERE NOT suspect), 3),
+           max(prix) FILTER (WHERE NOT suspect),
+           now()
+      FROM juges WHERE code_departement IS NOT NULL
+     GROUP BY jour, carburant, code_departement
+    UNION ALL
+    SELECT jour, carburant, 'reseau',
+           CASE WHEN autoroute THEN 'autoroute' ELSE 'route' END,
+           count(*) FILTER (WHERE NOT suspect)::integer,
+           count(*) FILTER (WHERE suspect)::integer,
+           min(prix) FILTER (WHERE NOT suspect),
+           (percentile_cont(0.5) WITHIN GROUP (ORDER BY prix)
+                FILTER (WHERE NOT suspect))::numeric(5,3),
+           round(avg(prix) FILTER (WHERE NOT suspect), 3),
+           max(prix) FILTER (WHERE NOT suspect),
+           now()
+      FROM juges GROUP BY jour, carburant, autoroute
+) lignes (jour, carburant, dimension, valeur, stations, exclus,
+          prix_min, prix_median, prix_moyen, prix_max, calcule_le)
+WHERE stations > 0
+ON CONFLICT (jour, carburant, dimension, valeur) DO UPDATE SET
+    stations    = EXCLUDED.stations,
+    exclus      = EXCLUDED.exclus,
+    prix_min    = EXCLUDED.prix_min,
+    prix_median = EXCLUDED.prix_median,
+    prix_moyen  = EXCLUDED.prix_moyen,
+    prix_max    = EXCLUDED.prix_max,
+    calcule_le  = EXCLUDED.calcule_le
+"""
+
+
+def calculer_periode(
+    connexion: psycopg.Connection[tuple[object, ...]],
+    debut: dt.date,
+    fin: dt.date,
+) -> int:
+    """Calcule les agregats de toute une periode en une passe.
+
+    A utiliser apres un amorcage : `rafraichir` convient pour un ou deux jours, pas
+    pour dix-neuf ans. Idempotent comme elle.
+    """
+    if fin < debut:
+        raise ValueError(f"periode a l envers : {debut} -> {fin}")
+    with connexion.transaction(), connexion.cursor() as curseur:
+        curseur.execute(
+            _AGREGER_EN_MASSE,
+            {"debut": debut, "fin": fin, "fenetre": FENETRE_PEREMPTION_JOURS},
+        )
+        lignes = curseur.rowcount
+    journal.info("agregats du %s au %s : %d ligne(s)", debut, fin, lignes)
+    return lignes

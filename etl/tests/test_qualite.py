@@ -403,3 +403,68 @@ def test_un_prix_perime_ne_compte_pas_dans_l_agregat(base: str) -> None:
     assert ligne is not None
     assert ligne[0] == 5, "seules les stations au prix non perime comptent"
     assert nombre(ligne[1]) == 1.800, "le prix perime a 1,200 ne doit pas tirer le minimum"
+
+
+@sans_base
+def test_le_calcul_en_masse_deplie_la_validite_de_chaque_prix(base: str) -> None:
+    """Un changement de prix vaut jusqu'au suivant, et au plus trente jours.
+
+    Calculer jour par jour conviendrait pour un ou deux jours ; sur dix-neuf ans ce
+    serait 7 000 requetes. La version en masse deplie chaque changement sur sa duree
+    de validite en une passe.
+    """
+    base_jour = dt.date(2026, 3, 2)
+    premier = dt.datetime(2026, 3, 2, 10, tzinfo=PARIS)
+    second = dt.datetime(2026, 3, 5, 10, tzinfo=PARIS)
+    stations, lignes = un_departement(combien=6, prix_eur=1.700, instant=premier)
+    _, lignes_apres = un_departement(combien=6, prix_eur=1.900, instant=second)
+
+    connexion = ouvrir(base)
+    try:
+        charger_tout(connexion, premier, stations, lignes)
+        charger_tout(connexion, second, stations, lignes_apres, sha="b" * 64)
+        agregats.calculer_periode(connexion, base_jour, dt.date(2026, 3, 8))
+        with connexion.cursor() as curseur:
+            curseur.execute(
+                "SELECT jour, prix_median FROM marts.agregat_prix_jour "
+                "WHERE dimension = 'france' AND carburant = 'gazole' ORDER BY jour"
+            )
+            serie = [(j, nombre(p)) for j, p in curseur.fetchall()]
+    finally:
+        connexion.close()
+
+    par_jour = dict(serie)
+    # Du 2 au 4 mars, le premier prix est en vigueur ; a partir du 5, le second.
+    assert par_jour[dt.date(2026, 3, 3)] == 1.700
+    assert par_jour[dt.date(2026, 3, 4)] == 1.700
+    assert par_jour[dt.date(2026, 3, 5)] == 1.900
+    assert par_jour[dt.date(2026, 3, 8)] == 1.900, "le dernier prix reste en vigueur"
+
+
+@sans_base
+def test_le_calcul_en_masse_est_rejouable(base: str) -> None:
+    instant = dt.datetime(2026, 3, 2, 10, tzinfo=PARIS)
+    stations, lignes = un_departement(combien=6, prix_eur=1.700, instant=instant)
+    connexion = ouvrir(base)
+    try:
+        charger_tout(connexion, instant, stations, lignes)
+        premier = agregats.calculer_periode(connexion, dt.date(2026, 3, 2), dt.date(2026, 3, 4))
+        second = agregats.calculer_periode(connexion, dt.date(2026, 3, 2), dt.date(2026, 3, 4))
+        with connexion.cursor() as curseur:
+            curseur.execute("SELECT count(*) FROM marts.agregat_prix_jour")
+            total = curseur.fetchone()
+    finally:
+        connexion.close()
+    assert premier == second
+    assert total is not None and total[0] == premier
+
+
+@sans_base
+def test_une_periode_a_l_envers_est_refusee(base: str) -> None:
+    """Une periode inversee est une erreur d appel, pas une periode vide."""
+    connexion = ouvrir(base)
+    try:
+        with pytest.raises(ValueError, match="envers"):
+            agregats.calculer_periode(connexion, dt.date(2026, 3, 5), dt.date(2026, 3, 1))
+    finally:
+        connexion.close()

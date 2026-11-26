@@ -57,6 +57,11 @@ def _parseur() -> argparse.ArgumentParser:
         default=7,
         help="nombre de jours recents a recalculer ; 0 recalcule tout l historique",
     )
+    refresh.add_argument(
+        "--annee",
+        type=int,
+        help="recalcule une annee entiere en une passe (apres un amorcage)",
+    )
     sous.add_parser("qualite", help="rejoue les controles qualite")
     # Pas dans la boucle de quinze minutes : la Base Carbone bouge une fois par an.
     sous.add_parser("facteurs", help="recupere les facteurs d emission de l ADEME")
@@ -169,13 +174,25 @@ def _backfill(annee: int) -> int:
     return 0
 
 
-def _refresh(jours: int | None) -> int:
-    """Rafraichit la reference departementale et les agregats journaliers."""
+def _refresh(jours: int | None, annee: int | None) -> int:
+    """Rafraichit la reference departementale et les agregats journaliers.
+
+    Avec `--annee`, recalcule l annee entiere en une passe : c est ce qu il faut
+    apres un amorcage, ou rejouer jour par jour voudrait dire 365 requetes.
+    """
+    import datetime as dt
+
     from carburant_etl.chargement import agregats
     from carburant_etl.chargement.staging import ouvrir
 
     connexion = ouvrir(Config.depuis_environnement().database_url)
     try:
+        if annee is not None:
+            lignes = agregats.calculer_periode(
+                connexion, dt.date(annee, 1, 1), dt.date(annee, 12, 31)
+            )
+            print(f"annee {annee} : {lignes} ligne(s) d agregat.")
+            return 0
         resultat = agregats.rafraichir(connexion, jours=jours)
     finally:
         connexion.close()
@@ -244,7 +261,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.commande == "qualite":
         return _qualite()
     if args.commande == "refresh":
-        return _refresh(args.jours if args.jours > 0 else None)
+        return _refresh(args.jours if args.jours > 0 else None, args.annee)
     if args.commande == "facteurs":
         return _facteurs()
     if args.commande == "backfill":
