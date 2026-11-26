@@ -20,7 +20,19 @@ Jeu « Prix des carburants en France – Flux instantané – v2 » (DGCCRF / mi
 - **[corrigé 23/11/2026]** Le flux expose en revanche `departement`, `code_departement`, `region` et `code_region`, renseignés pour 9 822 des 9 826 stations. **Aucune jointure spatiale n'est nécessaire pour le département.**
 - **[corrigé 23/11/2026]** Les champs `latitude` et `longitude` du flux v2 sont du **texte en degrés × 100 000** (format PTV non converti). Le champ `geom` (`geo_point_2d`) est en degrés décimaux corrects, cohérence vérifiée sur les 9 826 stations : **utiliser `geom`**.
 - **[corrigé 23/11/2026]** **Aucune station en DROM** dans le flux (0 code en 97x/98x). La Corse est présente en `2A`/`2B`. Les archives annuelles, elles, contiennent des DROM et des coordonnées aberrantes.
-- **[corrigé 23/11/2026]** L'API répond en gzip/brotli : un client qui ne négocie pas l'encodage reçoit des octets illisibles. Ne les invente pas et ne scrape pas prix-carburants.gouv.fr. Piste par défaut pour les enseignes : rapprochement spatial PostGIS avec OpenStreetMap (`amenity=fuel`, tags `brand` et `name`, licence ODbL, attribution obligatoire), avec un score de correspondance stocké et un taux de couverture mesuré et affiché. Sans enseigne, une station s'affiche par son adresse et sa ville.
+- **[corrigé 23/11/2026]** L'API répond en gzip/brotli : un client qui ne négocie pas l'encodage reçoit des octets illisibles. Ne les invente pas et ne scrape pas prix-carburants.gouv.fr. Piste par défaut pour les enseignes : rapprochement avec OpenStreetMap (`amenity=fuel`, tags `brand` et `name`, licence ODbL, attribution obligatoire), avec un score de correspondance stocké et un taux de couverture mesuré et affiché. Sans enseigne, une station s'affiche par son adresse et sa ville.
+
+**[corrigé 26/11/2026] Le rapprochement n'est pas d'abord spatial : OSM porte l'identifiant
+officiel.** Mesure sur les 12 610 points `amenity=fuel` de France : **`ref:FR:prix-carburants`
+est renseigné sur 10 146 d'entre eux (80,5 %)** — c'est l'identifiant de station du flux que
+nous collectons. Pour ces stations, le rapprochement est une **jointure sur clé**, de score 1,0.
+Le rapprochement spatial ne sert que pour le reliquat, avec un score dégradé selon la distance.
+Détail et chiffres dans `docs/reconnaissance.md` § 6.
+
+**[ajouté 26/11/2026] Le classement par enseigne doit se construire sur `brand:wikidata`, pas
+sur le libellé.** `brand` éclate une même enseigne en plusieurs écritures — TotalEnergies 1 209,
+Total 1 078, Total Access 405 — là où `brand:wikidata = Q154037` en compte 2 674, soit leur
+somme. Un classement bâti sur le libellé compterait Total trois fois.
 
 ### Historique
 Le flux ne donne que l'état courant : on historise nous-mêmes. Pour amorcer l'historique :

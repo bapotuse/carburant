@@ -711,3 +711,71 @@ MapLibre exige.
 | 13 | web.md | TresJS « s'il est compatible » | Compatible Nuxt 4, **mais `@tresjs/nuxt` dépend de `@nuxt/ui`**, interdit par la spec | `@tresjs/core` + `three` en direct, sans le module Nuxt. |
 | 14 | infra.md | PostGIS arm64 « à vérifier » | Toujours **amd64 seulement** sur `postgis/postgis` | `imresamu/postgis` en arm64 si le VPS est aarch64. |
 | 15 | donnees.md | — | **4 658 `<prix>` malformés** par archive annuelle ; `<fermeture>` absent du flux ; encodage **ISO-8859-1** ; deux formats de `maj` **dans le même fichier** | Parseur tolérant, rejets comptés. |
+
+## 6. Enseignes — OpenStreetMap (reconnaissance du 26/11/2026)
+
+### Le constat qui change le plan : OSM porte l'identifiant officiel
+
+La spécification prévoyait un **rapprochement spatial** PostGIS entre nos stations et les points
+`amenity=fuel` d'OpenStreetMap. Mesure faite : ce n'est pas nécessaire pour la grande majorité
+des stations.
+
+```
+[out:json][timeout:600];
+area["ISO3166-1"="FR"][admin_level=2]->.fr;
+nwr["amenity"="fuel"](area.fr);
+out center tags;
+```
+
+**12 610 éléments** (8 119 `node`, 4 478 `way`, 13 `relation`), 7,7 Mo de JSON, réponse en 103 s.
+`out center` donne une position à tous : **0 élément sans position exploitable.**
+
+| Tag | Éléments | Part |
+|---|---|---|
+| `name` | 10 853 | **86,1 %** |
+| `brand` | 10 833 | **85,9 %** |
+| `brand:wikidata` | 10 205 | **80,9 %** |
+| **`ref:FR:prix-carburants`** | **10 146** | **80,5 %** |
+| `operator` | 4 385 | 34,8 % |
+
+**`ref:FR:prix-carburants` est l'identifiant officiel du flux que nous collectons déjà** (par
+exemple `"21320007"`). Pour 80,5 % des stations OSM, le rapprochement est donc une **jointure sur
+clé**, pas une devinette géographique. Beaucoup portent d'ailleurs un tag `source` du type
+« Ministère de l'Economie, de l'Industrie et du Numérique - 03/2020 » : OSM a importé la même
+source officielle que nous.
+
+→ **Stratégie retenue** : jointure sur `ref:FR:prix-carburants` d'abord, score 1,0 ;
+rapprochement spatial seulement pour le reste, avec un score dégradé selon la distance. Le taux
+de correspondance final est mesuré et affiché, et sans enseigne une station s'affiche par son
+adresse.
+
+### `brand:wikidata` unifie les variantes de marque
+
+C'est le second apport, et il résout un problème que la spec n'avait pas vu venir. Les libellés
+`brand` éclatent une même enseigne en plusieurs écritures :
+
+| `brand` | Éléments |
+|---|---|
+| TotalEnergies | 1 209 |
+| Total | 1 078 |
+| Total Access | 405 |
+
+…alors que `brand:wikidata = Q154037` en compte **2 674**, soit la somme à quelques unités près.
+Un classement d'enseignes construit sur le libellé compterait Total trois fois ; construit sur
+l'identifiant Wikidata, il compte juste.
+
+Les quinze premières enseignes par libellé : Intermarché 1 679, TotalEnergies 1 209, Total 1 078,
+Carrefour 1 024, Avia 726, E.Leclerc 651, Esso 494, Super U 409, Total Access 405, Système U 340,
+Elan 285, Carrefour Market 270, Auchan 260, Esso Express 231, Vito 177.
+
+### Accès réseau : trois constats
+
+1. **`overpass-api.de` est injoignable depuis l'environnement de développement de la session.**
+   L'hôte est pourtant autorisé par la politique réseau ; chaque tentative meurt sur
+   `ws_closed_mid_exchange` — le tunnel vers le proxy sortant se ferme avant la fin de l'échange.
+   Ce n'est ni un refus de politique (403/407) ni un problème de certificat.
+2. **Depuis un runner GitHub, la première tentative a aussi échoué** (« Could not connect » en
+   335 ms), puis la seconde, deux minutes plus tard, a réussi. L'instance est donc joignable mais
+   capricieuse : le client doit réessayer et savoir basculer sur un miroir.
+3. Licence **ODbL** : l'attribution d'OpenStreetMap est **obligatoire** partout où une enseigne
+   est affichée. À prévoir dans le pied de page et dans `/v1/meta`.
