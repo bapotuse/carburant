@@ -44,8 +44,17 @@ Le flux ne donne que l'état courant : on historise nous-mêmes. Pour amorcer l'
 - Parse en streaming (`iterparse`), jamais 5 Go en mémoire.
 
 **Périmètre retenu : historique complet 2007 → aujourd'hui, en détail, sans agrégats dégradés.**
-Mesuré : ≈ 64 M de lignes ≈ **6,5 Go** en base, chargeables en moins de 30 minutes. Le volume ne
+Mesuré : ≈ 64 M de lignes ≈ 6,5 Go en base, chargeables en moins de 30 minutes. Le volume ne
 justifie pas de dégrader les années anciennes.
+
+**[corrigé 26/11/2026] Volumétrie et durée revues à la hausse, par mesure.** Deux années
+réellement chargées (2007 et 2022, une par ère d'unité) : **5 905 672 lignes, 431 Mo de
+données + 245 Mo d'index = 677 Mo, soit 120,2 octets par ligne** — contre 102 estimés.
+L'historique complet fera donc **≈ 7,7 Go**, pas 6,5. Le VPS a 17 Go libres : cela passe,
+mais il n'y a plus de marge pour un doublement.
+Durée : **222 s pour les 5,04 M de lignes de 2022**, soit ≈ 45 s par million, parsing XML
+compris. L'historique complet demande donc **≈ 50 minutes**, pas 30. L'amorçage se fait
+année par année, chacune étant idempotente : une coupure se reprend sans dégât.
 
 ### Empreinte carbone
 **[corrigé 23/11/2026]** Base Carbone® de l'ADEME (Licence Ouverte). Le portail a **migré

@@ -138,6 +138,37 @@ def _run(rejouer: Path | None) -> int:
     return 0
 
 
+def _backfill(annee: int) -> int:
+    """Charge une annee d archive dans l historique."""
+    from carburant_etl.chargement.backfill import amorcer
+    from carburant_etl.chargement.staging import ouvrir
+
+    config = Config.depuis_environnement()
+    connexion = ouvrir(config.database_url)
+    try:
+        resultat = amorcer(
+            connexion,
+            annee,
+            repertoire=config.repertoire_brut,
+            user_agent=config.user_agent,
+        )
+    finally:
+        connexion.close()
+
+    print(
+        f"archive {resultat.annee} : {resultat.stations_lues} stations "
+        f"({resultat.stations_creees} nouvelle(s)), {resultat.prix_lus} prix lus, "
+        f"{resultat.prix_inseres} insere(s), {resultat.prix_deja_connus} deja connu(s), "
+        f"en {resultat.duree_secondes:.0f} s."
+    )
+    if resultat.partitions_creees:
+        print(f"partitions creees : {len(resultat.partitions_creees)}")
+    rejets = {c: n for c, n in resultat.rejets.items() if c != "exemples" and n}
+    if rejets:
+        print("rejets : " + ", ".join(f"{motif} {nombre}" for motif, nombre in rejets.items()))
+    return 0
+
+
 def _refresh(jours: int | None) -> int:
     """Rafraichit la reference departementale et les agregats journaliers."""
     from carburant_etl.chargement import agregats
@@ -216,10 +247,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _refresh(args.jours if args.jours > 0 else None)
     if args.commande == "facteurs":
         return _facteurs()
+    if args.commande == "backfill":
+        return _backfill(args.annee)
 
-    # backfill arrive au Jalon 2.
-    sys.stderr.write(f"commande '{args.commande}' : implementation a venir.\n")
-    return 0
+    sys.stderr.write(f"commande inconnue : {args.commande}\n")
+    return 2
 
 
 if __name__ == "__main__":
