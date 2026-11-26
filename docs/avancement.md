@@ -190,6 +190,46 @@ Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le documen
 
 ## Journal
 
+- **2026-11-26 (suite) — Jalon 2 : enseignes, audit independant, dbt.**
+  **Les enseignes, et une correction de plan.** La specification prevoyait un
+  rapprochement spatial avec OpenStreetMap. En interrogeant vraiment Overpass, on
+  trouve mieux : **80,5 % des 12 613 points `amenity=fuel` de France portent
+  `ref:FR:prix-carburants`**, l'identifiant du flux que nous collectons. Le
+  rapprochement est donc une jointure sur cle, et la geographie ne sert que de filet.
+  Resultat mesure sur le VPS : **99,4 % de couverture** -- 9 761 stations par
+  identifiant, 8 par distance, 59 sans enseigne.
+  Second apport : `brand:wikidata` unifie les variantes de marque (TotalEnergies
+  1 209 + Total 1 078 + Total Access 405 = Q154037, 2 674). Le classement par
+  enseigne se construit dessus ; sur le libelle, Total serait compte trois fois.
+  **Overpass est injoignable depuis l'environnement de developpement** (le tunnel se
+  ferme en cours d'echange). Plutot que de coder a l'aveugle contre une API, ce que
+  `CLAUDE.md` interdit, la reconnaissance a ete faite depuis un runner GitHub, puis
+  le rapprochement tourne sur le VPS par un workflow manuel.
+  **L'audit independant** (`revue-donnees`), lance sur un relecteur qui n'avait pas
+  ecrit le pipeline : tirage de stations compare au fichier brut, recalcul des
+  agregats par ses propres requetes, verification des facteurs CO2 en ligne, trois
+  relances de l'ETL, 4 060 cas tires au sort sur la regle des atypiques.
+  **Aucun ecart bloquant**, et il a confirme le fuseau horaire de bout en bout,
+  archives comprises, ainsi que la reconciliation brut / base au chiffre exact.
+  Mais **cinq defauts reels**, tous corriges : une fenetre de peremption a 31 jours
+  au lieu de 30 dans le calcul en masse (23 prix d'ecart sur le seul 15 mars 2007) ;
+  une divergence SQL/Python pile au seuil, due aux flottants ; l'amorcage qui ne
+  laissait aucune trace dans `meta.execution_etl` ; seuls les controles en echec
+  consignes ; un seul jour d'agregat rafraichi apres une collecte.
+  **Le test cense verrouiller la fenetre avait d'abord ete ecrit faux** : il prenait
+  une date a vingt-neuf jours de la cible et passait donc avec le bug en place.
+  Verifie en remettant le bug. Un test qui n'echoue pas contre le code fautif ne
+  prouve rien.
+  Deux arbitrages ecrits plutot que laisses en contradiction : les prix « anciens »
+  entrent dans les agregats (effet mesure : 1,1 a 1,3 centime) et restent exclus des
+  classements ; et `exclus` ne compte que les atypiques, ce que son commentaire
+  pretendait elargir.
+  **Proposition dbt** : `docs/proposition-dbt.md`. Non pour l'ingestion, a reevaluer
+  pour la couche d'agregats apres le Jalon 3, avec trois criteres de declenchement.
+  Attribution ODbL d'OpenStreetMap et de l'ADEME declarees dans `/v1/meta`, avec un
+  test : une obligation de licence ne doit pas pouvoir disparaitre d'un remaniement.
+  **297 tests** : 210 unitaires, 80 d'integration, 7 contre les vraies sources.
+
 - **2026-11-26 — Jalon 2 : qualite, agregats, ADEME, amorcage.** Cinq des neuf cases
   du jalon, en trois tranches commitees separement.
   **Les controles qualite**, ecrits en SQL, chacun rendant un verdict et une mesure
