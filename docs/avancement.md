@@ -1,41 +1,48 @@
 # Avancement
 
 ## Prochaine action
-**Jalon 2 : l'ETL complet.** Toutes les regles de transformation testees, le
-partitionnement automatique, `snapshot_prix_jour` et les vues agregees, les facteurs
-d'emission de l'ADEME, les enseignes OpenStreetMap, l'amorcage de l'historique depuis
-les archives, les controles qualite a chaque execution, puis la revue `revue-donnees`.
+**J2, les enseignes OpenStreetMap.** Le flux officiel ne donne ni nom ni enseigne :
+le rapprochement spatial avec OpenStreetMap (`amenity=fuel`, tags `brand` et `name`)
+est la piste retenue au cadrage. Commencer par une **vraie requete Overpass** avant
+d'ecrire quoi que ce soit, et ajouter l'hote a la politique reseau de
+l'environnement. Taux de correspondance a mesurer et a afficher ; sous un seuil, pas
+de classement par enseigne.
 
-Rien n'attend Baptiste pour cela.
+Puis, dans l'ordre : l'amorcage complet des seize annees **sur le VPS** (ici il
+serait perdu a la fin du conteneur), la revue `revue-donnees`, et la proposition dbt
+dans le bilan de jalon.
 
-**Le Jalon 1 est termine.** Le critere de sortie est atteint et constate :
+**Fait et verifie au J2, le 26/11/2026 :**
 
-> depuis un telephone, l'URL publique → « le Prado, Marseille » → stations reelles
-> avec prix et fraicheur ; deux executions successives de l'ETL ne creent aucun doublon.
+1. **Les controles qualite.** Huit questions posees en SQL, chacune rendant un
+   verdict et une mesure lisible. Deux niveaux : bloquant (execution en echec,
+   processus en erreur) et avertissement. Un controle en echec ne rejette jamais les
+   donnees chargees. Mesure sur les vraies donnees : **1,21 % de prix atypiques** sur
+   25 359 prix frais, pile dans la fourchette de 0,4 a 2,5 % de la reconnaissance.
+2. **La regle des prix atypiques**, qui existait en Python sans etre branchee, vit
+   desormais en SQL a cote de la donnee, avec un test qui verifie que les deux
+   implementations disent la meme chose.
+3. **Les agregats journaliers** (`marts.agregat_prix_jour`), calcules sur les prix
+   **en vigueur** et non sur les seuls prix modifies ce jour-la.
+4. **Les facteurs d'emission de l'ADEME**, historises, avec un garde-fou qui refuse
+   un facteur dont l'unite ou l'ordre de grandeur a change.
+5. **L'amorcage de l'historique** : `etl backfill --annee AAAA`, en streaming.
+   Charge en vrai : 2007 (862 528 prix, mediane gazole **1,075 EUR**) et 2022
+   (5 043 144 prix, mediane **1,862 EUR**) -- les deux eres d'unite. Rejoue : zero
+   ligne inseree. Partition DEFAULT : **0 ligne** sur 27 partitions.
 
-**<https://carburant.144-24-195-97.sslip.io>** — en ligne, en HTTPS, certificat
-Let's Encrypt obtenu au premier essai. Taper `144.24.195.97` redirige vers cette
-adresse.
+**Trois defauts trouves en faisant tourner, pas en relisant** : le controle des prix
+atypiques depassait 25 secondes (reference departementale desormais materialisee :
+0,84 s) ; le parseur d'archives attrapait la mauvaise exception et un nom de
+carburant inattendu aurait fait planter tout l'amorcage ; et deux de mes propres
+tests etaient faux.
 
-Constate le 25/11/2026, sur le site en ligne et non en local :
+**Deux corrections de la spec, par mesure** : les noms de champs de la Base Carbone
+portent les accents, et l'historique complet pesera **7,7 Go** pour **50 minutes** de
+chargement, et non 6,5 Go pour 30 minutes (120,2 octets par ligne mesures contre 102
+estimes). Le VPS a 17 Go libres : cela passe, sans marge pour un doublement.
 
-- le parcours « chercher depuis un telephone » rejoue **contre la production** par le
-  deploiement lui-meme, sur iPhone SE, Pixel 7 et bureau, sans aucune erreur de
-  console ; captures dans `docs/captures/production/` ;
-- « le Prado, Marseille » → ambiguite annoncee, cinq candidats, puis 20 stations
-  reelles triees par prix, chacune avec sa date et sa distance ;
-- `/v1/sante` → `statut: ok`, base joignable, schema pret ;
-- les prix affichés **bougent** : 1,975 €/L « il y a 2 heures » la ou la veille en
-  local on lisait 1,990 € « il y a 23 heures ». Le collecteur tourne sur le VPS
-  toutes les quinze minutes, tout seul.
-
-La machine est enfin connue : **Ampere aarch64, Oracle Linux 9.8, 10 Go de RAM, 4 Go
-de swap, 17 Go de disque libre**. PostGIS est aligne sur la meme image qu'elle, en
-developpement comme en CI.
-
-**Ce qui reste a faire par Baptiste, et par lui seul : ouvrir le site sur son
-iPhone**, en 4G et en wifi, et essayer « Ma position ». C'est la seule chose que
-personne d'autre ne peut verifier, et le HTTPS vient tout juste de la rendre possible.
+**Le Jalon 1 est en ligne** : <https://carburant.144-24-195-97.sslip.io>, en HTTPS.
 
 Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seuils, et
 `docs/decisions.md` avant de refaire un choix deja tranche.
@@ -134,13 +141,13 @@ Sortie : depuis un téléphone, l'URL publique → « le Prado, Marseille » →
 par le déploiement lui-même. Reste le test sur l'iPhone réel de Baptiste.
 
 ### J2 — ETL complet
-- [ ] Toutes les règles de transformation (normalisation, aberrants, fraîcheur, ruptures, déduplication), testées
-- [ ] Partitionnement mensuel, création automatique des partitions
-- [ ] `snapshot_prix_jour` et vues agrégées
-- [ ] `ref_facteur_emission` depuis l'API ADEME, versionnée
+- [x] Toutes les règles de transformation (normalisation, aberrants, fraîcheur, ruptures, déduplication), testées — 26/11/2026, la règle des prix atypiques désormais branchée et en SQL
+- [x] Partitionnement mensuel, création automatique des partitions — 27 partitions sur l'amorçage, DEFAULT vide
+- [x] ~~`snapshot_prix_jour`~~ `marts.agregat_prix_jour` et vues agrégées — 26/11/2026, grain revu et spec corrigée
+- [x] `ref_facteur_emission` depuis l'API ADEME, versionnée — 26/11/2026, `etl facteurs`
 - [ ] Enseignes via OpenStreetMap (si validé), taux de correspondance mesuré
-- [ ] Amorçage de l'historique depuis les archives (périmètre validé), en streaming
-- [ ] Contrôles qualité à chaque exécution, journal `meta.execution_etl`
+- [x] Amorçage de l'historique depuis les archives, en streaming — 26/11/2026, `etl backfill`, deux années chargées pour de vrai. **Reste à lancer sur le VPS pour les seize années.**
+- [x] Contrôles qualité à chaque exécution, journal `meta.execution_etl` — 26/11/2026, huit contrôles
 - [ ] Revue `revue-donnees` sans écart bloquant
 - [ ] Proposition dbt dans le bilan
 
@@ -182,6 +189,37 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-26 — Jalon 2 : qualite, agregats, ADEME, amorcage.** Cinq des neuf cases
+  du jalon, en trois tranches commitees separement.
+  **Les controles qualite**, ecrits en SQL, chacun rendant un verdict et une mesure
+  lisible. Deux niveaux, bloquant et avertissement, et un controle en echec ne rejette
+  jamais les donnees chargees : c'est l'execution qu'on marque.
+  **La regle des prix atypiques** existait en Python depuis le Jalon 0 **sans etre
+  branchee nulle part**. Elle vit maintenant en SQL a cote de la donnee, comme la
+  fraicheur, avec un test qui verifie que les deux implementations partagent leurs
+  constantes et jugent pareil aux bornes. Mesure sur les vraies donnees : **1,21 %**
+  de prix atypiques, pile dans la fourchette de la reconnaissance.
+  **Les agregats journaliers.** La spec prevoyait un instantane de grain station x
+  carburant x jour : chiffre fait avant d'ecrire, **plus de 400 millions de lignes**
+  pour un budget de 6,5 Go, et redondant avec `fact_prix`. Remplace par un agregat sur
+  les prix **en vigueur**, en format long. Spec corrigee.
+  **Les facteurs d'emission de l'ADEME**, historises sans jamais de mise a jour en
+  place. Verifies par requete reelle avant d'ecrire une ligne : les noms de champs
+  portent les accents, ce que la spec n'avait pas vu, et une requete sans accents
+  renvoie une page d'erreur au lieu d'une erreur JSON.
+  **L'amorcage de l'historique**, en streaming. Charge en vrai pour les deux eres
+  d'unite : 2007 (862 528 prix, mediane gazole 1,075 EUR) et 2022 (5 043 144 prix,
+  1,862 EUR). Rejoue : zero ligne. Partition DEFAULT vide sur 27 partitions. Un prix
+  relu en heure de Paris redonne exactement l'horodatage du XML.
+  **Trois defauts trouves en faisant tourner** : le controle des prix atypiques
+  depassait 25 secondes, la reference departementale etant reevaluee par paquets de
+  lignes (materialisee : 0,84 s) ; le parseur d'archives attrapait `KeyError` la ou la
+  normalisation leve `CarburantInconnu`, donc un nom de carburant inattendu aurait
+  fait planter tout l'amorcage ; et deux de mes tests etaient faux.
+  **Volumetrie corrigee par mesure** : 120,2 octets par ligne contre 102 estimes, soit
+  **7,7 Go** pour l'historique complet et **50 minutes** de chargement.
+  Nouvelles commandes : `etl qualite`, `etl refresh`, `etl facteurs`, `etl backfill`.
 
 - **2026-11-25 — Le Jalon 1 est en ligne.**
   <https://carburant.144-24-195-97.sslip.io>, en HTTPS, certificat Let's Encrypt
