@@ -31,13 +31,36 @@ jobs:
           FIN
           echo "Requete envoyee :"; cat requete.overpassql
 
-          curl -sS --fail-with-body \
-            --data-urlencode "data@requete.overpassql" \
-            -A "carburant/0.1 reconnaissance (+https://github.com/bapotuse/carburant)" \
-            -o france.json \
-            https://overpass-api.de/api/interpreter
-
-          echo "Reponse : $(stat -c %s france.json) octets"
+          # L'instance principale refuse les connexions depuis les plages des
+          # hebergeurs (constate le 26/11/2026 : « Could not connect » en 335 ms
+          # depuis un runner GitHub comme depuis le conteneur de developpement).
+          # On essaie les miroirs publics, et on dit lequel a repondu : c'est celui
+          # que le code utilisera.
+          miroirs="
+          https://overpass-api.de/api/interpreter
+          https://overpass.kumi.systems/api/interpreter
+          https://overpass.private.coffee/api/interpreter
+          https://overpass.osm.ch/api/interpreter
+          https://maps.mail.ru/osm/tools/overpass/api/interpreter
+          "
+          repondu=""
+          for miroir in $miroirs; do
+            echo "--- essai : $miroir"
+            if curl -sS --fail-with-body --max-time 600 \
+                 --data-urlencode "data@requete.overpassql" \
+                 -A "carburant/0.1 reconnaissance (+https://github.com/bapotuse/carburant)" \
+                 -o france.json "$miroir"; then
+              echo "    a repondu : $(stat -c %s france.json) octets"
+              repondu="$miroir"
+              break
+            fi
+            echo "    sans reponse exploitable"
+          done
+          if [ -z "$repondu" ]; then
+            echo "::error::Aucun miroir Overpass n a repondu."
+            exit 1
+          fi
+          echo "MIROIR RETENU : $repondu"
 
           python3 - <<'FIN'
           import collections, json
