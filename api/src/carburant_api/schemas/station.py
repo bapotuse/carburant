@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -133,3 +133,94 @@ class ReponseStationsProches(BaseModel):
             "l'ensemble des donnees, a distinguer de celle de chaque prix."
         ),
     )
+
+
+class Enseigne(BaseModel):
+    """L'enseigne d'une station, avec la facon dont elle a ete trouvee.
+
+    Le flux officiel ne contient ni nom ni enseigne : celles-ci viennent
+    d'OpenStreetMap, sous licence ODbL. La provenance est rendue avec la valeur pour
+    que l'affichage puisse en tenir compte -- un rapprochement geographique merite
+    plus de prudence qu'une correspondance d'identifiant.
+    """
+
+    nom: str = Field(examples=["TotalEnergies"])
+    source: str = Field(
+        description=(
+            "`osm-reference` quand OpenStreetMap portait l identifiant officiel de la "
+            "station, `osm-spatial` quand le rapprochement est geographique."
+        ),
+        examples=["osm-reference"],
+    )
+    score: float | None = Field(
+        default=None,
+        description="1,0 pour un rapprochement par identifiant ; degrade selon la distance sinon.",
+        examples=[1.0],
+    )
+    objet_osm: str | None = Field(
+        default=None,
+        description="Objet OpenStreetMap rapproche, pour pouvoir verifier.",
+        examples=["node/144574"],
+    )
+
+
+class FicheStation(BaseModel):
+    """Tout ce qu'on sait d'une station.
+
+    Contrairement a une recherche, une fiche **ne cache rien** : elle montre aussi
+    les prix perimes et les carburants en rupture, avec leur date et leur etat. Un
+    prix de deux mois n'est pas une raison de faire comme s'il n'existait pas ; c'est
+    une raison de le dater.
+    """
+
+    id: int = Field(examples=[13008003])
+    adresse: str | None = Field(default=None, examples=["32 boulevard Schloesing"])
+    ville: str | None = Field(default=None, examples=["Marseille"])
+    cp: str | None = Field(default=None, examples=["13010"])
+    departement: str | None = Field(default=None, examples=["Bouches-du-Rhône"])
+    code_departement: str | None = Field(default=None, examples=["13"])
+    region: str | None = Field(default=None, examples=["Provence-Alpes-Côte d'Azur"])
+    autoroute: bool = Field(default=False, examples=[False])
+    latitude: float = Field(examples=[43.2726])
+    longitude: float = Field(examples=[5.3846])
+    enseigne: Enseigne | None = Field(
+        default=None, description="Absente quand OpenStreetMap ne connait pas cette station."
+    )
+    services: list[str] = Field(default_factory=list, examples=[["Automate CB 24/24"]])
+    horaires: dict[str, Any] | None = Field(
+        default=None, description="Horaires normalises tels que publies par le flux."
+    )
+    prix: list[PrixCarburant] = Field(
+        default_factory=list,
+        description="Tous les carburants connus, perimes et ruptures compris.",
+    )
+    premiere_vue: dt.datetime = Field(
+        description="Premiere fois que cette station apparait dans nos donnees."
+    )
+    derniere_vue: dt.datetime = Field(description="Derniere collecte ou elle etait presente.")
+    active: bool = Field(
+        description="Fausse quand la station a disparu du flux. Elle n'est jamais supprimee.",
+        examples=[True],
+    )
+
+
+class ChangementPrix(BaseModel):
+    """Un changement de prix, tel que la source l'a publie."""
+
+    carburant: str = Field(examples=["gazole"])
+    prix_eur_l: float = Field(examples=[1.879])
+    maj: dt.datetime = Field(examples=["2026-11-25T08:12:00Z"])
+
+
+class ReponseHistorique(BaseModel):
+    """L'historique des prix d'une station.
+
+    Le grain etant « un changement de prix », cet historique est exactement ce que la
+    source a publie : aucun echantillonnage, aucun lissage.
+    """
+
+    station_id: int = Field(examples=[13008003])
+    carburant: str | None = Field(default=None, examples=["gazole"])
+    depuis: dt.datetime
+    changements: list[ChangementPrix] = Field(default_factory=list)
+    total: int = Field(description="Nombre de changements renvoyes.", examples=[42])

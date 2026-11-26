@@ -168,3 +168,78 @@ async def lire_meta(pool: Pool) -> Meta:
         prix_connus=int(ligne["prix_connus"] or 0),
         carburants=list(ligne["carburants"] or []),
     )
+
+
+_SQL_FICHE = """
+SELECT s.id, s.adresse, s.ville, s.cp, s.departement, s.code_departement,
+       s.region, s.autoroute, s.horaires, s.services,
+       s.enseigne, s.enseigne_source, s.enseigne_score, s.enseigne_osm,
+       s.premiere_vue, s.derniere_vue, s.active,
+       ST_Y(s.geom::geometry) AS latitude,
+       ST_X(s.geom::geometry) AS longitude
+  FROM marts.dim_station s
+ WHERE s.id = %(id)s::bigint
+"""
+
+# Tous les carburants de la station, y compris ceux dont le prix est perime ou qui
+# sont en rupture : contrairement a une recherche, une fiche ne cache rien. Elle
+# affiche la date et l'etat, et laisse le lecteur juger.
+_SQL_FICHE_PRIX = """
+SELECT DISTINCT ON (f.carburant)
+       f.carburant, f.prix, f.maj,
+       marts.classe_fraicheur(f.maj) AS fraicheur,
+       r.type AS rupture_type, r.debut AS rupture_debut
+  FROM marts.fact_prix f
+  LEFT JOIN marts.rupture r ON r.station_id = f.station_id AND r.carburant = f.carburant
+ WHERE f.station_id = %(id)s::bigint
+ ORDER BY f.carburant, f.maj DESC
+"""
+
+_SQL_HISTORIQUE = """
+SELECT carburant, prix, maj
+  FROM marts.fact_prix
+ WHERE station_id = %(id)s::bigint
+   AND (%(carburant)s::text IS NULL OR carburant = %(carburant)s::text)
+   AND maj >= %(depuis)s::timestamptz
+ ORDER BY maj DESC, carburant
+ LIMIT %(limite)s::integer
+"""
+
+
+async def fiche(pool: Pool, station_id: int) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Une station et tous ses prix courants, perimes et ruptures compris."""
+    async with (
+        pool.connection(timeout=DELAI_CONNEXION) as connexion,
+        connexion.cursor(row_factory=dict_row) as curseur,
+    ):
+        await curseur.execute(_SQL_FICHE, {"id": station_id})
+        station = await curseur.fetchone()
+        if station is None:
+            return None, []
+        await curseur.execute(_SQL_FICHE_PRIX, {"id": station_id})
+        prix = await curseur.fetchall()
+    return station, prix
+
+
+async def historique(
+    pool: Pool,
+    station_id: int,
+    *,
+    carburant: str | None,
+    depuis: dt.datetime,
+    limite: int,
+) -> list[dict[str, Any]]:
+    """Les changements de prix d'une station depuis une date.
+
+    Le grain de `fact_prix` etant « un changement de prix », cet historique est
+    exactement ce que la source a publie : aucun echantillonnage, aucun lissage.
+    """
+    async with (
+        pool.connection(timeout=DELAI_CONNEXION) as connexion,
+        connexion.cursor(row_factory=dict_row) as curseur,
+    ):
+        await curseur.execute(
+            _SQL_HISTORIQUE,
+            {"id": station_id, "carburant": carburant, "depuis": depuis, "limite": limite},
+        )
+        return await curseur.fetchall()

@@ -8,10 +8,11 @@ pour un rayon de 10 km.
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 from typing import Annotated, Any, Final
 
-from fastapi import APIRouter, Query, Request, Response, status
+from fastapi import APIRouter, Path, Query, Request, Response, status
 
 from carburant_api.cache import poser_entetes
 from carburant_api.calcul import cout
@@ -23,16 +24,23 @@ from carburant_api.requetes.stations import (
     RAYON_MAX_KM,
     Recherche,
     Tri,
+    fiche,
+    historique,
     lire_meta,
     stations_proches,
 )
 from carburant_api.schemas.meilleure import Hypotheses, ReponseMeilleure, StationEvaluee
 from carburant_api.schemas.station import (
+    ChangementPrix,
+    Enseigne,
+    FicheStation,
     PrixCarburant,
+    ReponseHistorique,
     ReponseStationsProches,
     Rupture,
     StationProche,
 )
+from carburant_api.temps import maintenant
 
 routeur = APIRouter(prefix="/stations", tags=["stations"])
 
@@ -377,6 +385,157 @@ async def meilleure(
         stations=[evaluee for evaluee, _ in par_cout[:limite]],
         atteignables=len(atteignables),
         hypotheses=hypotheses,
+    )
+    poser_entetes(reponse, corps, max_age=_duree_cache())
+    return corps
+
+
+@routeur.get(
+    "/{station_id}",
+    summary="Fiche complete d'une station",
+    description=(
+        "Tout ce qu'on sait d'une station : adresse, enseigne, services, horaires, et "
+        "**tous** ses carburants.\n\n"
+        "Contrairement a une recherche, une fiche ne cache rien : les prix perimes et "
+        "les carburants en rupture y figurent, avec leur date et leur etat. Un prix de "
+        "deux mois n'est pas une raison de faire comme s'il n'existait pas, c'est une "
+        "raison de le dater.\n\n"
+        "L'enseigne vient d'OpenStreetMap (licence ODbL) et porte la facon dont elle a "
+        "ete trouvee : un rapprochement geographique merite plus de prudence qu'une "
+        "correspondance d'identifiant officiel."
+    ),
+    response_model=FicheStation,
+    responses={status.HTTP_404_NOT_FOUND: {"description": "Station inconnue (problem+json)."}},
+)
+async def fiche_station(
+    requete: Request,
+    reponse: Response,
+    station_id: Annotated[int, Path(description="Identifiant officiel.", examples=[13008003])],
+) -> FicheStation:
+    """La fiche d'une station."""
+    station, prix = await fiche(requete.app.state.pool, station_id)
+    if station is None:
+        raise ProblemeAPI(
+            statut=status.HTTP_404_NOT_FOUND,
+            titre="Station inconnue",
+            detail=(
+                f"Aucune station ne porte l'identifiant {station_id}. Les identifiants "
+                "sont ceux du flux officiel."
+            ),
+            type_=f"{BASE_TYPE}#station-inconnue",
+        )
+
+    enseigne = (
+        Enseigne(
+            nom=station["enseigne"],
+            source=station["enseigne_source"] or "inconnue",
+            score=float(station["enseigne_score"]) if station["enseigne_score"] else None,
+            objet_osm=station["enseigne_osm"],
+        )
+        if station["enseigne"]
+        else None
+    )
+
+    corps = FicheStation(
+        id=int(station["id"]),
+        adresse=station["adresse"],
+        ville=station["ville"],
+        cp=station["cp"],
+        departement=station["departement"],
+        code_departement=station["code_departement"],
+        region=station["region"],
+        autoroute=bool(station["autoroute"]),
+        latitude=float(station["latitude"]),
+        longitude=float(station["longitude"]),
+        enseigne=enseigne,
+        services=list(station["services"] or []),
+        horaires=station["horaires"],
+        prix=[
+            PrixCarburant(
+                carburant=ligne["carburant"],
+                prix_eur_l=float(ligne["prix"]) if ligne["prix"] is not None else None,
+                maj=ligne["maj"],
+                fraicheur=ligne["fraicheur"],
+                rupture=(
+                    Rupture(type=ligne["rupture_type"], debut=ligne["rupture_debut"])
+                    if ligne["rupture_type"]
+                    else None
+                ),
+            )
+            for ligne in prix
+        ],
+        premiere_vue=station["premiere_vue"],
+        derniere_vue=station["derniere_vue"],
+        active=bool(station["active"]),
+    )
+    poser_entetes(reponse, corps, max_age=_duree_cache())
+    return corps
+
+
+@routeur.get(
+    "/{station_id}/historique",
+    summary="Historique des prix d'une station",
+    description=(
+        "Les changements de prix d'une station, du plus recent au plus ancien.\n\n"
+        "Le grain de la base etant « un changement de prix », cet historique est "
+        "**exactement ce que la source a publie** : aucun echantillonnage, aucun "
+        "lissage, aucune interpolation. Entre deux changements, le prix n'a pas bouge."
+    ),
+    response_model=ReponseHistorique,
+    responses={status.HTTP_404_NOT_FOUND: {"description": "Station inconnue (problem+json)."}},
+)
+async def historique_station(
+    requete: Request,
+    reponse: Response,
+    station_id: Annotated[int, Path(description="Identifiant officiel.", examples=[13008003])],
+    carburant: Annotated[
+        str | None, Query(description="Un seul carburant, ou tous si absent.", examples=["gazole"])
+    ] = None,
+    jours: Annotated[
+        int, Query(ge=1, le=3650, description="Profondeur de l'historique.", examples=[90])
+    ] = 365,
+    limite: Annotated[
+        int, Query(ge=1, le=2000, description="Nombre maximal de changements.", examples=[500])
+    ] = 500,
+) -> ReponseHistorique:
+    """L'historique des prix d'une station."""
+    if carburant is not None and carburant not in CARBURANTS:
+        raise ProblemeAPI(
+            statut=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            titre="Carburant inconnu",
+            detail=f"« {carburant} » n'existe pas. Valeurs acceptees : {', '.join(CARBURANTS)}.",
+            type_=f"{BASE_TYPE}#carburant-inconnu",
+        )
+    station, _ = await fiche(requete.app.state.pool, station_id)
+    if station is None:
+        raise ProblemeAPI(
+            statut=status.HTTP_404_NOT_FOUND,
+            titre="Station inconnue",
+            detail=f"Aucune station ne porte l'identifiant {station_id}.",
+            type_=f"{BASE_TYPE}#station-inconnue",
+        )
+
+    depuis = maintenant() - dt.timedelta(days=jours)
+    lignes = await historique(
+        requete.app.state.pool,
+        station_id,
+        carburant=carburant,
+        depuis=depuis,
+        limite=limite,
+    )
+    corps = ReponseHistorique(
+        station_id=station_id,
+        carburant=carburant,
+        depuis=depuis,
+        changements=[
+            ChangementPrix(
+                carburant=ligne["carburant"],
+                prix_eur_l=float(ligne["prix"]),
+                maj=ligne["maj"],
+            )
+            for ligne in lignes
+        ],
+        total=len(lignes),
     )
     poser_entetes(reponse, corps, max_age=_duree_cache())
     return corps

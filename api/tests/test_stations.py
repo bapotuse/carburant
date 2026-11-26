@@ -477,3 +477,82 @@ async def test_une_position_hors_de_france_est_refusee(client: httpx.AsyncClient
     )
     assert reponse.status_code == 422
     assert "outre-mer" in reponse.json()["detail"]
+
+
+# ------------------------------------------------- /v1/stations/{id} et historique
+@sans_base
+async def test_la_fiche_montre_aussi_les_prix_perimes(client: httpx.AsyncClient) -> None:
+    """Contrairement a une recherche, une fiche ne cache rien.
+
+    La station 3 a un prix de 60 jours : il est absent des recherches, present sur
+    sa fiche, avec sa date et sa classe de fraicheur. Un prix vieux n'est pas une
+    raison de faire comme s'il n'existait pas, c'est une raison de le dater.
+    """
+    reponse = await client.get("/v1/stations/3")
+    assert reponse.status_code == 200
+    corps = reponse.json()
+    assert corps["id"] == 3
+    assert corps["prix"], "la fiche doit montrer le prix meme perime"
+    assert corps["prix"][0]["fraicheur"] == "perime"
+    assert corps["prix"][0]["maj"] is not None
+
+
+@sans_base
+async def test_une_station_inconnue_repond_404_en_problem_json(
+    client: httpx.AsyncClient,
+) -> None:
+    reponse = await client.get("/v1/stations/99999999")
+    assert reponse.status_code == 404
+    assert reponse.headers["content-type"].startswith("application/problem+json")
+    assert "identifiant" in reponse.json()["detail"]
+
+
+@sans_base
+async def test_la_fiche_porte_la_provenance_de_l_enseigne(
+    base: str, client: httpx.AsyncClient
+) -> None:
+    """Un rapprochement geographique merite plus de prudence qu'un identifiant."""
+    with psycopg.connect(base, autocommit=True) as connexion:
+        connexion.execute(
+            b"UPDATE marts.dim_station SET enseigne = 'TotalEnergies', "
+            b"enseigne_source = 'osm-reference', enseigne_score = 1.0, "
+            b"enseigne_osm = 'node/144574' WHERE id = 1"
+        )
+    corps = (await client.get("/v1/stations/1")).json()
+    assert corps["enseigne"]["nom"] == "TotalEnergies"
+    assert corps["enseigne"]["source"] == "osm-reference"
+    assert corps["enseigne"]["score"] == 1.0
+    assert corps["enseigne"]["objet_osm"] == "node/144574"
+
+
+@sans_base
+async def test_une_station_sans_enseigne_le_dit(client: httpx.AsyncClient) -> None:
+    """Rien n'est invente : sans enseigne, la station s'identifie par son adresse."""
+    corps = (await client.get("/v1/stations/2")).json()
+    assert corps["enseigne"] is None
+    assert corps["adresse"]
+
+
+@sans_base
+async def test_l_historique_est_du_plus_recent_au_plus_ancien(
+    client: httpx.AsyncClient,
+) -> None:
+    corps = (await client.get("/v1/stations/1/historique")).json()
+    dates = [c["maj"] for c in corps["changements"]]
+    assert dates == sorted(dates, reverse=True)
+    assert corps["total"] == len(corps["changements"])
+
+
+@sans_base
+async def test_l_historique_se_filtre_par_carburant(client: httpx.AsyncClient) -> None:
+    corps = (await client.get("/v1/stations/1/historique", params={"carburant": "gazole"})).json()
+    assert corps["carburant"] == "gazole"
+    assert all(c["carburant"] == "gazole" for c in corps["changements"])
+
+
+@sans_base
+async def test_l_historique_d_une_station_inconnue_repond_404(
+    client: httpx.AsyncClient,
+) -> None:
+    reponse = await client.get("/v1/stations/99999999/historique")
+    assert reponse.status_code == 404
