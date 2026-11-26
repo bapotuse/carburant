@@ -51,6 +51,18 @@ jobs:
           ssh vps-carburant "cd /opt/carburant && sudo docker compose -f compose.prod.yaml \
             run --rm --no-deps etl etl enseignes"
 
+      - name: Ce que ca donne
+        if: always()
+        run: |
+          ssh vps-carburant "cd /opt/carburant && sudo docker compose -f compose.prod.yaml \
+            exec -T db psql -U carburant -c \"
+              SELECT * FROM marts.couverture_enseigne ORDER BY stations DESC;
+              SELECT enseigne, enseigne_wikidata, stations, prix_median
+                FROM marts.classement_enseigne
+               WHERE carburant = 'gazole'
+               ORDER BY stations DESC LIMIT 15;
+            \""
+
       - name: Effacer la cle
         if: always()
         run: rm -f ~/.ssh/deploiement ~/.ssh/config

@@ -319,3 +319,47 @@ def test_la_couverture_est_mesurable(base: str) -> None:
     assert resultat.stations_actives == 3
     assert resultat.couverture_pourcent == pytest.approx(66.7, abs=0.1)
     assert couverture == {"aucune": 1, "osm-reference": 1, "osm-spatial": 1}
+
+
+@pytest.mark.integration
+@sans_base
+def test_le_classement_regroupe_sur_wikidata_et_non_sur_le_libelle(base: str) -> None:
+    """« Total », « TotalEnergies » et « Total Access » sont une seule enseigne.
+
+    C'est tout l'interet de `brand:wikidata`. Un classement bati sur le libelle
+    compterait Total trois fois et le ferait passer derriere ses concurrents a tort.
+    """
+    variantes = [
+        {
+            "type": "node",
+            "id": 900 + n,
+            "lat": 48.0 + n / 1000,
+            "lon": 2.0,
+            "tags": {
+                "amenity": "fuel",
+                "brand": libelle,
+                "brand:wikidata": "Q154037",
+                "ref:FR:prix-carburants": str(70000001 + n),
+            },
+        }
+        for n, libelle in enumerate(("Total", "TotalEnergies", "TotalEnergies", "Total Access"))
+    ]
+    connexion = ouvrir(base)
+    try:
+        for n in range(4):
+            poser_station(connexion, 70000001 + n, 2.0, 48.0 + n / 1000)
+        rapprocher(connexion, osm.lire_elements(variantes))
+        with connexion.cursor() as curseur:
+            curseur.execute(
+                "SELECT enseigne, enseigne_wikidata, stations "
+                "FROM marts.classement_enseigne ORDER BY stations DESC"
+            )
+            classement = curseur.fetchall()
+    finally:
+        connexion.close()
+    assert len(classement) == 1, f"les variantes devraient faire une seule enseigne : {classement}"
+    enseigne, wikidata, stations = classement[0]
+    assert wikidata == "Q154037"
+    assert stations == 4
+    # Le libelle retenu est le plus frequent du groupe.
+    assert enseigne == "TotalEnergies"

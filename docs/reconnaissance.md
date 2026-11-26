@@ -779,3 +779,19 @@ Elan 285, Carrefour Market 270, Auchan 260, Esso Express 231, Vito 177.
    capricieuse : le client doit réessayer et savoir basculer sur un miroir.
 3. Licence **ODbL** : l'attribution d'OpenStreetMap est **obligatoire** partout où une enseigne
    est affichée. À prévoir dans le pied de page et dans `/v1/meta`.
+
+### Résultat du rapprochement, mesuré en production le 26/11/2026
+
+| Provenance | Stations | Part | Score moyen |
+|---|---|---|---|
+| `osm-reference` (identifiant officiel) | **9 761** | **99,3 %** | 1,000 |
+| `osm-spatial` (géographique, ≤ 150 m) | 8 | 0,1 % | 0,794 |
+| aucune | 59 | 0,6 % | — |
+
+**99,4 % de couverture.** La requête Overpass a rendu 12 613 éléments, dont 12 018
+exploitables et 10 149 porteurs de l'identifiant officiel. La condition posée par la
+spécification pour afficher un classement d'enseignes — « seulement si la couverture
+est suffisante » — est donc largement remplie.
+
+Le rapprochement spatial ne sert qu'à huit stations : l'identifiant officiel fait
+presque tout le travail, ce qui n'était pas le plan initial.
