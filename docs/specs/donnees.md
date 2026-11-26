@@ -60,6 +60,16 @@ https://data.ademe.fr/data-fair/api/v1/datasets/base-carboner
 décomposition amont / combustion et feraient compter les facteurs en double. L'unité s'écrit
 `kgCO2e/litre`. Facteurs par litre, périmètre combustion + amont, France continentale.
 
+**[corrigé 26/11/2026] Les noms de champs portent les accents et l'apostrophe** :
+`Identifiant_de_l'élément`, `Statut_de_l'élément`, `Nom_base_français`,
+`Nom_attribut_français`, `Unité_français`, `Total_poste_non_décomposé`,
+`Localisation_géographique`, `Date_de_modification`, `Période_de_validité`. Seul
+`Type_Ligne` est sans accent. Une requête écrite avec des noms non accentués ne renvoie
+pas une erreur JSON mais une page d'erreur : le piège est silencieux.
+Vérifié par requête réelle le 26/11/2026 : les six facteurs existent, aux valeurs
+annoncées (3,1 / 2,69 / 2,69 / 1,11 / 1,86), statut « Valide générique », période de
+validité « déc-20 ». `Nom_attribut_français` est absent pour le GPL.
+
 Mapping retenu (tous « Valide générique », France continentale) :
 
 | Carburant | Identifiant | Libellé exact | Valeur | Combustion | Amont |

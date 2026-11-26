@@ -8,6 +8,7 @@ consistera a envelopper ces fonctions, sans les reecrire.
     etl backfill --annee A   amorce l'historique depuis une archive annuelle
     etl refresh              rafraichit les vues materialisees et snapshot_prix_jour
     etl qualite              rejoue les controles qualite sur la derniere collecte
+    etl facteurs             recupere les facteurs d emission de la Base Carbone
 """
 
 from __future__ import annotations
@@ -57,6 +58,8 @@ def _parseur() -> argparse.ArgumentParser:
         help="nombre de jours recents a recalculer ; 0 recalcule tout l historique",
     )
     sous.add_parser("qualite", help="rejoue les controles qualite")
+    # Pas dans la boucle de quinze minutes : la Base Carbone bouge une fois par an.
+    sous.add_parser("facteurs", help="recupere les facteurs d emission de l ADEME")
     return parseur
 
 
@@ -152,6 +155,34 @@ def _refresh(jours: int | None) -> int:
     return 0
 
 
+def _facteurs() -> int:
+    """Recupere les facteurs d emission de la Base Carbone et les historise.
+
+    Volontairement hors de la boucle de collecte : la Base Carbone bouge une fois
+    par an, interroger l ADEME toutes les quinze minutes n aurait aucun sens.
+    """
+    from carburant_etl.chargement.facteurs import charger
+    from carburant_etl.chargement.staging import ouvrir
+    from carburant_etl.sources.ademe import recuperer
+
+    config = Config.depuis_environnement()
+    facteurs = recuperer(config.user_agent)
+    connexion = ouvrir(config.database_url)
+    try:
+        resultat = charger(connexion, facteurs)
+    finally:
+        connexion.close()
+
+    for facteur in facteurs:
+        libelle = facteur.nom_base + (f" / {facteur.nom_attribut}" if facteur.nom_attribut else "")
+        print(f"  {facteur.carburant:7s} {facteur.valeur:6.3f} {facteur.unite}  {libelle}")
+    print(
+        f"version {resultat.version} : {resultat.nouveaux} facteur(s) ajoute(s), "
+        f"{resultat.deja_connus} deja connu(s)."
+    )
+    return 0
+
+
 def _qualite() -> int:
     """Rejoue les controles qualite sur l'etat courant de la base."""
     from carburant_etl.chargement.staging import ouvrir
@@ -183,6 +214,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _qualite()
     if args.commande == "refresh":
         return _refresh(args.jours if args.jours > 0 else None)
+    if args.commande == "facteurs":
+        return _facteurs()
 
     # backfill arrive au Jalon 2.
     sys.stderr.write(f"commande '{args.commande}' : implementation a venir.\n")
