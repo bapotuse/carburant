@@ -104,7 +104,21 @@ Flux aplati au format long, une ligne par station × carburant : prix, date de m
   - Chargement en `INSERT … ON CONFLICT DO UPDATE` sur la date de dernière observation : relancer une exécution ne crée aucun doublon.
   - Pourquoi ce grain : stocker chaque collecte ferait environ 10 000 stations × 6 carburants × 96 collectes par jour, soit près de 6 millions de lignes quotidiennes presque toutes répétées.
     **[corrigé 23/11/2026] Chiffre réel mesuré** sur l'archive 2025 : **5 297 799 changements de prix sur l'année, soit ≈ 14 500 par jour** — contre ≈ 5,66 millions de lignes par jour en stockant chaque collecte, **un rapport de 390**. Le grain unique est quasi parfait dans la source : **1 doublon exact sur 5,3 millions**. Volume mesuré en base : **307 Mo de données + 232 Mo d'index par an**, soit ≈ 102 Mo par million de lignes ; `COPY` de 5,3 M de lignes en **14 s**.
-- `snapshot_prix_jour` : station × carburant × jour → prix **en vigueur** ce jour-là (dernier changement avant la fin du jour, non périmé). Toutes les tendances partent de cette table. Raison : moyenner seulement les prix modifiés un jour donné biaise les moyennes vers les stations qui changent souvent leurs prix.
+- ~~`snapshot_prix_jour` : station × carburant × jour~~ **[corrigé 26/11/2026]
+  Remplacé par `marts.agregat_prix_jour`.** Chiffre fait : un instantané de grain
+  station × carburant × jour sur l'historique complet ferait 9 825 × 6 × 7 000 jours,
+  soit **plus de 400 millions de lignes**, pour un projet dont le budget total est de
+  6,5 Go. Il serait de surcroît redondant avec `fact_prix`, qui garde chaque
+  changement et raconte donc l'histoire d'une station mieux qu'un échantillonnage
+  quotidien.
+  Le biais que cette table devait éviter — moyenner les seuls prix *modifiés* un jour
+  donné favorise les stations qui changent souvent leurs prix — est évité en
+  agrégeant directement les prix **en vigueur** ce jour-là, sans table intermédiaire.
+  Grain retenu : `(jour, carburant, dimension, valeur)` en format long, où `dimension`
+  vaut `france`, `departement` ou `reseau`. Une seule table et une seule clé pour tous
+  les découpages ; le classement par enseigne s'y ajoutera sans migration de schéma.
+  Sont écartés du calcul **et comptés** : les prix périmés (plus de 30 jours), les
+  carburants en rupture, et les prix atypiques au sens de `marts.est_suspect`.
 - Vues (matérialisées si nécessaire, rafraîchies après chaque chargement) : prix moyen et médian par jour × département × carburant ; autoroute vs route ; stations les moins chères par zone ; classement des enseignes (seulement si la couverture est suffisante, taux affiché) ; état courant des ruptures.
 
 ### meta
@@ -141,6 +155,16 @@ Exécutés à chaque run ; un échec met le run en erreur et déclenche l'alerte
 - Fraîcheur de la source : la date de mise à jour la plus récente a moins de 2 h.
 
 Écrits en SQL, exécutés par l'ETL, couverts par pytest.
+
+**[précisé 26/11/2026]** Chaque contrôle renvoie `(ok, mesure)`, la mesure étant une
+phrase lisible dans un journal. Deux niveaux : **bloquant** (l'exécution est marquée
+en échec et le processus sort en erreur) et **avertissement** (consigné, l'exécution
+reste un succès). Sont des avertissements la fraîcheur de la source — elle peut
+légitimement ne rien publier pendant deux heures — et la part de prix atypiques, qu'une
+vague de hausses réelles fait monter sans que rien ne soit cassé.
+**Un contrôle en échec ne rejette jamais les données chargées** : c'est l'exécution
+qu'on marque, pas la donnée qu'on jette.
+S'y ajoute `aucune_date_future`, le garde-fou du fuseau horaire décrit plus haut.
 
 ## Orchestration
 - Une CLI : `etl run`, `etl backfill --annee AAAA`, `etl refresh`, `etl qualite`. Chaque étape (extract, transform, load, qualité) est une fonction idempotente : passer à Prefect plus tard consistera à envelopper ces fonctions, sans réécriture.

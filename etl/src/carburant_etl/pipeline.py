@@ -22,10 +22,11 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
-from carburant_etl.chargement import marts
+from carburant_etl.chargement import agregats, marts
 from carburant_etl.chargement.staging import charger, ouvrir, purger_staging
 from carburant_etl.config import Config
 from carburant_etl.modeles import Aplatissement, aplatir
+from carburant_etl.qualite import controles
 from carburant_etl.sources.flux_v2 import Collecte, purger, telecharger
 
 journal = logging.getLogger("carburant.etl")
@@ -44,6 +45,34 @@ class Resultat:
     fichiers_purges: int
     collectes_purgees: int
     marts: marts.ResultatMarts | None = None
+    qualite: list[controles.Verdict] | None = None
+
+
+class EchecQualite(RuntimeError):
+    """Au moins un controle qualite bloquant a echoue.
+
+    Porte les verdicts pour que l'appelant puisse les afficher. L'execution est deja
+    close en base quand cette exception est levee : les donnees sont chargees, c'est
+    le run qui est marque en echec.
+    """
+
+    def __init__(self, echecs: list[controles.Verdict]) -> None:
+        self.echecs = echecs
+        super().__init__(
+            "controles qualite en echec : " + ", ".join(f"{v.nom} ({v.mesure})" for v in echecs)
+        )
+
+
+def compter_stations_actives(connexion: psycopg.Connection[tuple[object, ...]]) -> int:
+    """Le nombre de stations actives, journalise pour servir de reference au run suivant.
+
+    C'est cette valeur que le controle `stations_stables` compare a la moyenne des
+    sept derniers jours : sans elle dans le journal, il n'aurait rien a comparer.
+    """
+    with connexion.cursor() as curseur:
+        curseur.execute("SELECT count(*) FROM marts.dim_station WHERE active")
+        ligne = curseur.fetchone()
+    return int(ligne[0]) if ligne and isinstance(ligne[0], int) else 0
 
 
 def demarrer_execution(connexion: psycopg.Connection[tuple[object, ...]], commande: str) -> int:
@@ -187,22 +216,32 @@ def executer(config: Config, *, rejouer: Path | None = None) -> Resultat:
             collecte_id = charger(connexion, collecte, aplati, execution_id=execution_id)
             resultat_marts = marts.charger(connexion, collecte_id)
 
-            # La partition DEFAULT doit rester vide : une ligne dedans veut dire
-            # qu'une partition manquait au moment de l'insertion.
-            orphelines = marts.partition_defaut_vide(connexion)
-            if orphelines:
-                raise RuntimeError(
-                    f"{orphelines} ligne(s) dans la partition DEFAULT de fact_prix : "
-                    "une partition mensuelle manquait."
-                )
+            # La reference departementale et les agregats du jour, avant les
+            # controles : le controle des prix atypiques lit la reference, et une
+            # reference d'il y a quinze minutes jugerait les prix d'il y a quinze
+            # minutes.
+            refresh = agregats.rafraichir(connexion, jours=1)
+
+            # Les controles tournent **apres** le chargement, et ne l'annulent pas.
+            # Une collecte ou le nombre de stations a bouge de 11 % reste une
+            # collecte a conserver : c'est l'execution qu'on marque en echec, pas la
+            # donnee qu'on jette.
+            verdicts = controles.executer(connexion)
 
             fichiers = purger(config.repertoire_brut, retention_jours=config.retention_jours)
             collectes = purger_staging(connexion)
 
+            echecs = controles.echecs_bloquants(verdicts)
+            avertissements: list[dict[str, Any]] = [
+                {"champ": champ, "motif": motif, "occurrences": nombre, "exemple": exemple}
+                for champ, motif, nombre, exemple in aplati.rejets.lignes()
+            ]
+            avertissements += [v.en_dictionnaire() for v in verdicts if not v.ok]
+
             cloturer_execution(
                 connexion,
                 execution_id,
-                statut="succes",
+                statut="echec" if echecs else "succes",
                 lignes_par_etape={
                     "extract": aplati.lignes_lues,
                     "transform": len(aplati.prix),
@@ -210,16 +249,23 @@ def executer(config: Config, *, rejouer: Path | None = None) -> Resultat:
                     "stations_inserees": resultat_marts.stations_inserees,
                     "stations_mises_a_jour": resultat_marts.stations_mises_a_jour,
                     "stations_desactivees": resultat_marts.stations_desactivees,
+                    "stations_actives": compter_stations_actives(connexion),
                     "prix_nouveaux": resultat_marts.prix_inseres,
                     "prix_revus": resultat_marts.prix_revus,
                     "ruptures": resultat_marts.ruptures,
                     "rejets": aplati.rejets.total,
+                    "agregats": refresh.lignes_agregat,
                 },
-                avertissements=[
-                    {"champ": champ, "motif": motif, "occurrences": nombre, "exemple": exemple}
-                    for champ, motif, nombre, exemple in aplati.rejets.lignes()
-                ],
+                avertissements=avertissements,
+                erreur=(
+                    "controles qualite en echec : "
+                    + ", ".join(f"{v.nom} ({v.mesure})" for v in echecs)
+                )
+                if echecs
+                else None,
             )
+            if echecs:
+                raise EchecQualite(echecs)
             return Resultat(
                 execution_id=execution_id,
                 collecte_id=collecte_id,
@@ -230,7 +276,12 @@ def executer(config: Config, *, rejouer: Path | None = None) -> Resultat:
                 fichiers_purges=fichiers,
                 collectes_purgees=collectes,
                 marts=resultat_marts,
+                qualite=verdicts,
             )
+        except EchecQualite:
+            # L'execution est deja close, avec son statut et le detail des echecs :
+            # la reclore en « echec » effacerait les lignes par etape.
+            raise
         except Exception as erreur:
             cloturer_execution(
                 connexion, execution_id, statut="echec", erreur=f"{type(erreur).__name__}: {erreur}"

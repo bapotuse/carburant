@@ -49,7 +49,13 @@ def _parseur() -> argparse.ArgumentParser:
     )
 
     sous.add_parser("migrate", help="applique les migrations SQL manquantes")
-    sous.add_parser("refresh", help="rafraichit snapshot_prix_jour et les vues")
+    refresh = sous.add_parser("refresh", help="rafraichit la reference et les agregats")
+    refresh.add_argument(
+        "--jours",
+        type=int,
+        default=7,
+        help="nombre de jours recents a recalculer ; 0 recalcule tout l historique",
+    )
     sous.add_parser("qualite", help="rejoue les controles qualite")
     return parseur
 
@@ -81,9 +87,16 @@ def _migrate() -> int:
 def _run(rejouer: Path | None) -> int:
     """Collecte, transforme, charge, puis controle."""
     # Import tardif : `etl --help` ne doit pas avoir besoin d'une base joignable.
-    from carburant_etl.pipeline import executer
+    from carburant_etl.pipeline import EchecQualite, executer
 
-    resultat = executer(Config.depuis_environnement(), rejouer=rejouer)
+    try:
+        resultat = executer(Config.depuis_environnement(), rejouer=rejouer)
+    except EchecQualite as echec:
+        # Les donnees sont chargees et l'execution est deja journalisee en echec.
+        # On sort en erreur pour que le planificateur et l'alerte le sachent.
+        for verdict in echec.echecs:
+            print(f"qualite [ECHEC] {verdict.nom} : {verdict.mesure}", file=sys.stderr)
+        return 1
 
     if resultat.inchange:
         print("contenu inchange depuis la derniere collecte : rien a charger.")
@@ -104,12 +117,57 @@ def _run(rejouer: Path | None) -> int:
         )
         if m.partitions_creees:
             print(f"partitions creees : {', '.join(m.partitions_creees)}")
+    if resultat.qualite is not None:
+        echecs = [v for v in resultat.qualite if not v.ok]
+        if echecs:
+            for verdict in echecs:
+                print(
+                    f"qualite [{'ECHEC' if verdict.bloquant else 'alerte'}] "
+                    f"{verdict.nom} : {verdict.mesure}"
+                )
+        else:
+            print(f"qualite : {len(resultat.qualite)} controles, tous au vert.")
     if resultat.fichiers_purges or resultat.collectes_purgees:
         print(
             f"purge : {resultat.fichiers_purges} fichier(s) brut(s), "
             f"{resultat.collectes_purgees} collecte(s) de staging."
         )
     return 0
+
+
+def _refresh(jours: int | None) -> int:
+    """Rafraichit la reference departementale et les agregats journaliers."""
+    from carburant_etl.chargement import agregats
+    from carburant_etl.chargement.staging import ouvrir
+
+    connexion = ouvrir(Config.depuis_environnement().database_url)
+    try:
+        resultat = agregats.rafraichir(connexion, jours=jours)
+    finally:
+        connexion.close()
+    print(
+        f"reference departementale rafraichie ; "
+        f"{resultat.lignes_agregat} ligne(s) d agregat sur {resultat.jours} jour(s)."
+    )
+    return 0
+
+
+def _qualite() -> int:
+    """Rejoue les controles qualite sur l'etat courant de la base."""
+    from carburant_etl.chargement.staging import ouvrir
+    from carburant_etl.qualite import controles
+
+    connexion = ouvrir(Config.depuis_environnement().database_url)
+    try:
+        verdicts = controles.executer(connexion)
+    finally:
+        connexion.close()
+
+    for verdict in verdicts:
+        marque = "ok " if verdict.ok else ("ECHEC" if verdict.bloquant else "alerte")
+        print(f"[{marque}] {verdict.nom} : {verdict.mesure}")
+    print(controles.resume(verdicts))
+    return 1 if controles.echecs_bloquants(verdicts) else 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -121,8 +179,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run(args.rejouer)
     if args.commande == "migrate":
         return _migrate()
+    if args.commande == "qualite":
+        return _qualite()
+    if args.commande == "refresh":
+        return _refresh(args.jours if args.jours > 0 else None)
 
-    # backfill, refresh et qualite arrivent aux Jalons 1 et 2.
+    # backfill arrive au Jalon 2.
     sys.stderr.write(f"commande '{args.commande}' : implementation a venir.\n")
     return 0
 
