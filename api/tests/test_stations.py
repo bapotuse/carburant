@@ -325,3 +325,22 @@ async def test_meta_annonce_la_couverture_et_ses_limites(
     assert corps["stations_actives"] == 5
     assert "outre-mer" in corps["couverture"]
     assert any("Etalab" in s["licence"] for s in corps["sources"])
+
+
+@sans_base
+async def test_meta_porte_l_attribution_d_openstreetmap(
+    client: httpx.AsyncClient,
+) -> None:
+    """La licence ODbL impose l attribution partout ou une enseigne est affichee.
+
+    Ce n'est pas une politesse : c'est une obligation de la licence sous laquelle
+    OpenStreetMap nous laisse utiliser ses enseignes. Le pied de page du site la
+    reprend depuis cette liste.
+    """
+    corps = (await client.get("/v1/meta")).json()
+    osm = [s for s in corps["sources"] if "OpenStreetMap" in s["attribution"]]
+    assert osm, f"attribution OpenStreetMap absente : {corps['sources']}"
+    assert "ODbL" in osm[0]["licence"]
+    assert osm[0]["url"].startswith("https://www.openstreetmap.org/copyright")
+    # L'ADEME aussi : les facteurs d'emission porteront un chiffre affiche.
+    assert any("ADEME" in s["attribution"] for s in corps["sources"])

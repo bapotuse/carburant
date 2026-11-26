@@ -43,6 +43,21 @@ SOURCES = [
         licence="Licence Ouverte 2.0 (Etalab)",
         attribution="IGN",
     ),
+    # L'attribution d'OpenStreetMap est **obligatoire** sous licence ODbL, partout ou
+    # une enseigne est affichee. Elle est donc declaree ici, et le pied de page du
+    # site la reprend.
+    Source(
+        nom="Enseignes des stations",
+        url="https://www.openstreetmap.org/copyright",
+        licence="Open Database License (ODbL)",
+        attribution="(c) les contributeurs d'OpenStreetMap",
+    ),
+    Source(
+        nom="Facteurs d'emission - Base Carbone",
+        url="https://data.ademe.fr/datasets/base-carbone(r)",
+        licence="Licence Ouverte 2.0 (Etalab)",
+        attribution="ADEME",
+    ),
 ]
 
 
@@ -80,7 +95,9 @@ class ReponseMeta(BaseModel):
 
 COUVERTURE = (
     "France metropolitaine et Corse. Le flux officiel ne contient aucune station "
-    "d'outre-mer, ni le nom ou l'enseigne des stations."
+    "d'outre-mer, ni le nom ou l'enseigne des stations : les enseignes viennent "
+    "d'OpenStreetMap, qui en couvre 99,4 % (mesure du 26/11/2026). Une station sans "
+    "enseigne connue s'affiche par son adresse."
 )
 
 
