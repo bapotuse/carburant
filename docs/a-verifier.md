@@ -76,3 +76,18 @@ décision ou un accès.
   correspondants à `null`, et l'ETL ne peut pas les voir. Aucun prix n'est concerné :
   l'effet se limite à l'information de disponibilité (« ne vend pas ce carburant »
   plutôt que « en rupture »). Cause en amont, rien à corriger chez nous.
+
+### Ouverts par le Jalon 3 (26/11/2026)
+
+- **Le facteur de détour de 1,3 n'est pas mesuré.** Il convertit la distance à vol
+  d'oiseau en distance routière estimée, et la spec demande de le « justifier ou
+  calibrer ». À 10 km à vol d'oiseau, 1,3 ajoute 6 km d'aller-retour, soit environ
+  0,80 € de carburant brûlé : la valeur n'est pas neutre, un facteur trop faible
+  ferait recommander des stations trop lointaines. À calibrer contre le service
+  d'itinéraire de la Géoplateforme sur un échantillon de couples (position, station),
+  et à noter dans `reconnaissance.md`.
+- **Les valeurs par défaut du formulaire — 40 L et 7 L/100 km — ne sont pas des
+  moyennes françaises mesurées.** Ce sont des valeurs pré-remplies, modifiables, et
+  elles ne sont présentées nulle part comme un fait. Si on veut un jour afficher « le
+  plein moyen en France », il faudra une source (SDES, ADEME) ; en attendant, ne pas
+  les habiller en statistique.
