@@ -86,6 +86,33 @@ Le type `geography` calcule les distances en mètres sur l'ellipsoïde, et l'ind
 rend la question « quelles stations à moins de 10 km » quasi instantanée. Mesuré :
 **13,7 ms** pour 116 stations dans un rayon de 10 km, avec le dernier prix de chacune.
 
+**Prix « en vigueur » contre prix « modifié ».** C'est la distinction la plus
+importante du projet, et la plus facile à rater. Le flux ne publie que les
+*changements* de prix : moyenner les prix modifiés un jour donné reviendrait à ne
+compter que les stations nerveuses, celles qui bougent souvent. Les agrégats portent
+donc sur les prix **en vigueur** — pour chaque station, le dernier changement
+antérieur à la fin du jour, s'il a moins de trente jours. Le 15 mars 2007, 879 prix de
+gazole ont été modifiés ; 6 050 étaient en vigueur.
+
+**Prix atypique, et pourquoi on ne le supprime pas.** Un prix très éloigné de la
+médiane de son département est signalé, mais **conservé et affiché** : ce sont le plus
+souvent de vrais prix élevés — L'Île-d'Yeu, Val-d'Isère, Saint-Tropez. Il est
+simplement exclu des moyennes et des classements. La règle utilise l'écart absolu
+médian (MAD) plutôt que l'écart-type, parce que la MAD n'est pas tirée par les valeurs
+extrêmes qu'on cherche justement à détecter.
+
+**Contrôle qualité exécuté, pas relu.** Huit questions sont posées à la base à chaque
+collecte — le nombre de stations a-t-il bougé de plus de 10 % ? la partition DEFAULT
+est-elle vide ? une date est-elle dans le futur ? Chacune rend un verdict **et une
+mesure lisible**. Un échec marque l'exécution, mais ne jette jamais les données
+chargées : on garde la donnée et on signale.
+
+**Rapprochement par clé plutôt que par géographie.** Pour attacher une enseigne à une
+station, le plan était de chercher le point OpenStreetMap le plus proche. En
+interrogeant vraiment OSM, on a trouvé mieux : 80 % de ses stations françaises portent
+l'identifiant officiel du flux. Le rapprochement est donc une jointure, et la
+géographie ne sert que de filet — 8 stations sur 9 769. Couverture obtenue : **99,4 %**.
+
 **API REST et OpenAPI.** L'API décrit elle-même ses routes, ses paramètres et ses
 réponses dans un fichier OpenAPI. Ce fichier n'est pas de la documentation décorative :
 le client TypeScript du site **en est généré**, et la CI échoue s'il n'est plus à jour.
@@ -117,7 +144,7 @@ outils en lecture, et n'accède qu'à l'API publique.
 
 | Choix | Pourquoi | Ce qu'on perd |
 |---|---|---|
-| **Grain = changement de prix** | ≈ 14 500 lignes par jour au lieu de ≈ 5,66 millions, soit un rapport de **390** | il faut une table `snapshot_prix_jour` pour les moyennes : moyenner les seuls prix modifiés un jour donné biaiserait vers les stations qui changent souvent |
+| **Grain = changement de prix** | ≈ 14 500 lignes par jour au lieu de ≈ 5,66 millions, soit un rapport de **390** | les moyennes demandent un calcul à part, sur les prix **en vigueur** : moyenner les seuls prix modifiés un jour donné biaiserait vers les stations qui changent souvent |
 | **SQL brut / SQLAlchemy Core, pas d'ORM** | les requêtes géographiques et les agrégats s'écrivent mieux en SQL ; on voit ce qui part à la base | pas de mapping objet automatique, il faut écrire les requêtes |
 | **CSS natif, zéro librairie de composants** | c'est la première source de l'air « généré par IA » ; et le poids JS reste maîtrisé (**77,7 Ko gzip** pour tout le site) | tout composant est à dessiner, donc plus lent à écrire |
 | **Le MCP appelle l'API, jamais la base** | n'importe qui peut l'installer ; la base n'est jamais exposée | un appel réseau de plus, donc un peu de latence |
@@ -148,6 +175,11 @@ Mesurés le 23/11/2026. Les cases vides seront remplies au jalon indiqué.
 | Idempotence | **0 prix inséré, 33 153 déjà connus** | deuxième exécution de suite sur les mêmes données |
 | Partitions créées | **15** | juillet 2025 → décembre 2026, partition DEFAULT vide |
 | `/v1/stations/proches`, p95 | **18,7 ms** | 200 requêtes dans dix villes de France (médiane 10,4 ms, max 65,5 ms) |
+| Couverture des enseignes | **99,4 %** | 9 761 par identifiant officiel OSM, 8 par géographie, 59 sans |
+| Part de prix atypiques signalés | **1,21 %** | sur 25 359 prix frais, fourchette attendue 0,4 à 2,5 % |
+| Poids réel d'une ligne d'historique | **120,2 octets** | mesuré sur 5,9 M de lignes (431 Mo de données + 245 Mo d'index) |
+| Durée d'amorçage | **≈ 45 s par million de lignes** | parsing XML compris, mesuré sur l'archive 2022 |
+| Agrégats journaliers | **86 392 lignes pour 365 jours**, en 34 s | année 2007 complète, calcul en une passe |
 | Durée de l'amorçage complet de l'historique | à mesurer (Jalon 2) | |
 | Scores Lighthouse mobile | à mesurer (Jalon 5) | |
 | Taux de couverture des enseignes OSM | à mesurer (Jalon 2) | |
@@ -194,6 +226,17 @@ parfaitement — elle est rendue côté serveur — mais plus rien ne répond, a
 aucune suggestion d'adresse. Le site pose désormais sa propre politique avec un nonce
 par requête, et un test Playwright surveille la console pendant tout le parcours, parce
 qu'aucune autre assertion ne voit la différence tant qu'on ne touche pas aux boutons.
+
+**L'audit qui a trouvé une fenêtre de trente et un jours.** À la fin du Jalon 2, un
+relecteur indépendant — qui n'avait pas écrit le pipeline — a recalculé les agrégats
+par ses propres requêtes. Verdict : aucun prix faux, aucune date fausse, aucun
+doublon. Mais deux chemins de calcul coexistaient, l'un accordant trente jours de
+validité à un prix, l'autre trente et un. Le même jour recalculé par l'autre chemin
+changeait de valeur — 23 prix de gazole d'écart sur le seul 15 mars 2007. Le test
+censé verrouiller ce point avait d'abord été écrit faux : il prenait une date à
+vingt-neuf jours de la cible et passait donc tranquillement avec le bug en place. Un
+test qui n'échoue pas contre le code fautif ne prouve rien — on le vérifie en remettant
+le bug.
 
 **Le seuil de fraîcheur qui aurait écarté un prix sur cinq.** La date de mise à jour
 est celle du dernier *changement* de prix, pas du dernier contrôle. Une station qui ne

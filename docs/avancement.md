@@ -145,11 +145,11 @@ par le déploiement lui-même. Reste le test sur l'iPhone réel de Baptiste.
 - [x] Partitionnement mensuel, création automatique des partitions — 27 partitions sur l'amorçage, DEFAULT vide
 - [x] ~~`snapshot_prix_jour`~~ `marts.agregat_prix_jour` et vues agrégées — 26/11/2026, grain revu et spec corrigée
 - [x] `ref_facteur_emission` depuis l'API ADEME, versionnée — 26/11/2026, `etl facteurs`
-- [ ] Enseignes via OpenStreetMap (si validé), taux de correspondance mesuré
-- [x] Amorçage de l'historique depuis les archives, en streaming — 26/11/2026, `etl backfill`, deux années chargées pour de vrai. **Reste à lancer sur le VPS pour les seize années.**
+- [x] Enseignes via OpenStreetMap, taux de correspondance mesuré — 26/11/2026, **99,4 %** sur le VPS (9 761 par identifiant officiel, 8 par distance, 59 sans)
+- [x] Amorçage de l'historique depuis les archives, en streaming — 26/11/2026, `etl backfill`, deux années chargées en local. Les seize années lancées sur le VPS par le workflow `amorcage.yml`.
 - [x] Contrôles qualité à chaque exécution, journal `meta.execution_etl` — 26/11/2026, huit contrôles
-- [ ] Revue `revue-donnees` sans écart bloquant
-- [ ] Proposition dbt dans le bilan
+- [x] Revue `revue-donnees` sans écart bloquant — 26/11/2026, **aucun écart bloquant**, cinq défauts réels corrigés
+- [x] Proposition dbt dans le bilan — `docs/proposition-dbt.md`
 
 Sortie : tests verts ; rapport qualité de la dernière exécution ; volumes réels notés.
 
