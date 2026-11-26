@@ -81,6 +81,423 @@
         "title": "Candidat",
         "type": "object"
       },
+      "ChangementPrix": {
+        "description": "Un changement de prix, tel que la source l'a publie.",
+        "properties": {
+          "carburant": {
+            "examples": [
+              "gazole"
+            ],
+            "title": "Carburant",
+            "type": "string"
+          },
+          "maj": {
+            "examples": [
+              "2026-11-25T08:12:00Z"
+            ],
+            "format": "date-time",
+            "title": "Maj",
+            "type": "string"
+          },
+          "prix_eur_l": {
+            "examples": [
+              1.879
+            ],
+            "title": "Prix Eur L",
+            "type": "number"
+          }
+        },
+        "required": [
+          "carburant",
+          "prix_eur_l",
+          "maj"
+        ],
+        "title": "ChangementPrix",
+        "type": "object"
+      },
+      "Empreinte": {
+        "description": "L'empreinte d'un carburant pour le volume compare.",
+        "properties": {
+          "carburant": {
+            "examples": [
+              "e85"
+            ],
+            "title": "Carburant",
+            "type": "string"
+          },
+          "co2_kg": {
+            "examples": [
+              44.4
+            ],
+            "title": "Co2 Kg",
+            "type": "number"
+          },
+          "facteur_kg_co2e_par_litre": {
+            "examples": [
+              1.11
+            ],
+            "title": "Facteur Kg Co2E Par Litre",
+            "type": "number"
+          }
+        },
+        "required": [
+          "carburant",
+          "co2_kg",
+          "facteur_kg_co2e_par_litre"
+        ],
+        "title": "Empreinte",
+        "type": "object"
+      },
+      "Enseigne": {
+        "description": "L'enseigne d'une station, avec la facon dont elle a ete trouvee.\n\nLe flux officiel ne contient ni nom ni enseigne : celles-ci viennent\nd'OpenStreetMap, sous licence ODbL. La provenance est rendue avec la valeur pour\nque l'affichage puisse en tenir compte -- un rapprochement geographique merite\nplus de prudence qu'une correspondance d'identifiant.",
+        "properties": {
+          "nom": {
+            "examples": [
+              "TotalEnergies"
+            ],
+            "title": "Nom",
+            "type": "string"
+          },
+          "objet_osm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Objet OpenStreetMap rapproche, pour pouvoir verifier.",
+            "examples": [
+              "node/144574"
+            ],
+            "title": "Objet Osm"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "1,0 pour un rapprochement par identifiant ; degrade selon la distance sinon.",
+            "examples": [
+              1.0
+            ],
+            "title": "Score"
+          },
+          "source": {
+            "description": "`osm-reference` quand OpenStreetMap portait l identifiant officiel de la station, `osm-spatial` quand le rapprochement est geographique.",
+            "examples": [
+              "osm-reference"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nom",
+          "source"
+        ],
+        "title": "Enseigne",
+        "type": "object"
+      },
+      "FacteurEmission": {
+        "description": "Un facteur d'emission, avec sa provenance complete.\n\nSans provenance, un chiffre d'empreinte carbone n'est pas verifiable : c'est\nl'ADEME qui le publie, pas nous.",
+        "properties": {
+          "carburant": {
+            "examples": [
+              "gazole"
+            ],
+            "title": "Carburant",
+            "type": "string"
+          },
+          "libelle_ademe": {
+            "description": "Libelle exact publie par l'ADEME, recopie sans retouche.",
+            "examples": [
+              "Gazole routier / B7"
+            ],
+            "title": "Libelle Ademe",
+            "type": "string"
+          },
+          "localisation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "France continentale"
+            ],
+            "title": "Localisation"
+          },
+          "periode_validite": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "déc-20"
+            ],
+            "title": "Periode Validite"
+          },
+          "statut": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Valide générique"
+            ],
+            "title": "Statut"
+          },
+          "unite": {
+            "examples": [
+              "kgCO2e/litre"
+            ],
+            "title": "Unite",
+            "type": "string"
+          },
+          "url": {
+            "examples": [
+              "https://data.ademe.fr/data-fair/api/v1/datasets/base-carboner/lines?..."
+            ],
+            "title": "Url",
+            "type": "string"
+          },
+          "valeur_kg_co2e_par_litre": {
+            "examples": [
+              3.1
+            ],
+            "exclusiveMinimum": 0.0,
+            "title": "Valeur Kg Co2E Par Litre",
+            "type": "number"
+          },
+          "version_base": {
+            "description": "Date de derniere modification du jeu ADEME : la Base Carbone n'expose pas de numero de version.",
+            "examples": [
+              "2026-06-30T10:17:08.470Z"
+            ],
+            "title": "Version Base",
+            "type": "string"
+          }
+        },
+        "required": [
+          "carburant",
+          "valeur_kg_co2e_par_litre",
+          "unite",
+          "libelle_ademe",
+          "version_base",
+          "url"
+        ],
+        "title": "FacteurEmission",
+        "type": "object"
+      },
+      "FicheStation": {
+        "description": "Tout ce qu'on sait d'une station.\n\nContrairement a une recherche, une fiche **ne cache rien** : elle montre aussi\nles prix perimes et les carburants en rupture, avec leur date et leur etat. Un\nprix de deux mois n'est pas une raison de faire comme s'il n'existait pas ; c'est\nune raison de le dater.",
+        "properties": {
+          "active": {
+            "description": "Fausse quand la station a disparu du flux. Elle n'est jamais supprimee.",
+            "examples": [
+              true
+            ],
+            "title": "Active",
+            "type": "boolean"
+          },
+          "adresse": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "32 boulevard Schloesing"
+            ],
+            "title": "Adresse"
+          },
+          "autoroute": {
+            "default": false,
+            "examples": [
+              false
+            ],
+            "title": "Autoroute",
+            "type": "boolean"
+          },
+          "code_departement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "13"
+            ],
+            "title": "Code Departement"
+          },
+          "cp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "13010"
+            ],
+            "title": "Cp"
+          },
+          "departement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Bouches-du-Rhône"
+            ],
+            "title": "Departement"
+          },
+          "derniere_vue": {
+            "description": "Derniere collecte ou elle etait presente.",
+            "format": "date-time",
+            "title": "Derniere Vue",
+            "type": "string"
+          },
+          "enseigne": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Enseigne"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Absente quand OpenStreetMap ne connait pas cette station."
+          },
+          "horaires": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Horaires normalises tels que publies par le flux.",
+            "title": "Horaires"
+          },
+          "id": {
+            "examples": [
+              13008003
+            ],
+            "title": "Id",
+            "type": "integer"
+          },
+          "latitude": {
+            "examples": [
+              43.2726
+            ],
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "examples": [
+              5.3846
+            ],
+            "title": "Longitude",
+            "type": "number"
+          },
+          "premiere_vue": {
+            "description": "Premiere fois que cette station apparait dans nos donnees.",
+            "format": "date-time",
+            "title": "Premiere Vue",
+            "type": "string"
+          },
+          "prix": {
+            "description": "Tous les carburants connus, perimes et ruptures compris.",
+            "items": {
+              "$ref": "#/components/schemas/PrixCarburant"
+            },
+            "title": "Prix",
+            "type": "array"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Provence-Alpes-Côte d'Azur"
+            ],
+            "title": "Region"
+          },
+          "services": {
+            "examples": [
+              [
+                "Automate CB 24/24"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Services",
+            "type": "array"
+          },
+          "ville": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Marseille"
+            ],
+            "title": "Ville"
+          }
+        },
+        "required": [
+          "id",
+          "latitude",
+          "longitude",
+          "premiere_vue",
+          "derniere_vue",
+          "active"
+        ],
+        "title": "FicheStation",
+        "type": "object"
+      },
       "Fraicheur": {
         "description": "Age d'un prix, en quatre classes.\n\n`maj` est la date du dernier **changement** de prix, pas du dernier controle :\nune station qui ne bouge pas ses prix pendant dix jours n'est pas fausse pour\nautant. Seuils mesures, voir `docs/reconnaissance.md` section 1.9.",
         "enum": [
@@ -103,6 +520,131 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Hypotheses": {
+        "description": "Ce que le calcul suppose, dit explicitement.",
+        "properties": {
+          "aller_retour": {
+            "default": true,
+            "description": "Le detour est compte a l'aller **et** au retour. Vrai pour qui fait un detour expres, faux pour qui fait le plein sur sa route.",
+            "title": "Aller Retour",
+            "type": "boolean"
+          },
+          "consommation_l_100km": {
+            "description": "Consommation retenue, en litres aux 100 km.",
+            "examples": [
+              7.0
+            ],
+            "title": "Consommation L 100Km",
+            "type": "number"
+          },
+          "facteur_detour": {
+            "description": "Rapport applique entre distance a vol d'oiseau et distance routiere estimee. Valeur de depart, non encore calibree contre un service d'itineraire.",
+            "examples": [
+              1.3
+            ],
+            "title": "Facteur Detour",
+            "type": "number"
+          },
+          "litres": {
+            "description": "Volume du plein retenu, en litres.",
+            "examples": [
+              40.0
+            ],
+            "title": "Litres",
+            "type": "number"
+          },
+          "marge_autonomie": {
+            "description": "Part de l'autonomie annoncee qu'on s'autorise a consommer. L'autonomie d'un tableau de bord est optimiste.",
+            "examples": [
+              0.8
+            ],
+            "title": "Marge Autonomie",
+            "type": "number"
+          },
+          "prix_du_trajet": {
+            "default": "Le carburant brule pendant le trajet est valorise au prix de la station visee. C'est une approximation : il vient en realite du reservoir, achete ailleurs.",
+            "description": "Comment le carburant du detour est valorise.",
+            "title": "Prix Du Trajet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "facteur_detour",
+          "marge_autonomie",
+          "litres",
+          "consommation_l_100km"
+        ],
+        "title": "Hypotheses",
+        "type": "object"
+      },
+      "PointSerie": {
+        "description": "Un jour d'une serie de prix.",
+        "properties": {
+          "exclus": {
+            "description": "Prix atypiques ecartes du calcul mais comptes.",
+            "examples": [
+              106
+            ],
+            "title": "Exclus",
+            "type": "integer"
+          },
+          "jour": {
+            "examples": [
+              "2026-11-25"
+            ],
+            "format": "date",
+            "title": "Jour",
+            "type": "string"
+          },
+          "prix_max_eur_l": {
+            "examples": [
+              2.319
+            ],
+            "title": "Prix Max Eur L",
+            "type": "number"
+          },
+          "prix_median_eur_l": {
+            "examples": [
+              1.879
+            ],
+            "title": "Prix Median Eur L",
+            "type": "number"
+          },
+          "prix_min_eur_l": {
+            "examples": [
+              1.629
+            ],
+            "title": "Prix Min Eur L",
+            "type": "number"
+          },
+          "prix_moyen_eur_l": {
+            "examples": [
+              1.884
+            ],
+            "title": "Prix Moyen Eur L",
+            "type": "number"
+          },
+          "stations": {
+            "description": "Nombre de prix retenus ce jour-la. Nettement plus bas sur les premiers jours d'une periode amorcee : l'historique n'y est pas encore complet.",
+            "examples": [
+              8742
+            ],
+            "title": "Stations",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "jour",
+          "stations",
+          "exclus",
+          "prix_min_eur_l",
+          "prix_median_eur_l",
+          "prix_moyen_eur_l",
+          "prix_max_eur_l"
+        ],
+        "title": "PointSerie",
         "type": "object"
       },
       "PrixCarburant": {
@@ -180,6 +722,86 @@
         "title": "PrixCarburant",
         "type": "object"
       },
+      "ReponseComparaison": {
+        "description": "Les six carburants au meme volume, du moins emetteur au plus emetteur.",
+        "properties": {
+          "avertissement": {
+            "description": "Ce que la comparaison ne dit pas.",
+            "examples": [
+              "Comparaison a volume egal, pas a distance egale."
+            ],
+            "title": "Avertissement",
+            "type": "string"
+          },
+          "empreintes": {
+            "items": {
+              "$ref": "#/components/schemas/Empreinte"
+            },
+            "title": "Empreintes",
+            "type": "array"
+          },
+          "litres": {
+            "examples": [
+              40.0
+            ],
+            "title": "Litres",
+            "type": "number"
+          },
+          "source": {
+            "description": "Version du jeu ADEME dont sont tires les facteurs.",
+            "examples": [
+              "2026-06-30T10:17:08.470Z"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "litres",
+          "source",
+          "avertissement"
+        ],
+        "title": "ReponseComparaison",
+        "type": "object"
+      },
+      "ReponseEmpreinte": {
+        "description": "L'empreinte d'un plein, et d'ou vient le facteur.",
+        "properties": {
+          "carburant": {
+            "examples": [
+              "gazole"
+            ],
+            "title": "Carburant",
+            "type": "string"
+          },
+          "co2_kg": {
+            "description": "litres x facteur.",
+            "examples": [
+              124.0
+            ],
+            "title": "Co2 Kg",
+            "type": "number"
+          },
+          "facteur": {
+            "$ref": "#/components/schemas/FacteurEmission"
+          },
+          "litres": {
+            "examples": [
+              40.0
+            ],
+            "title": "Litres",
+            "type": "number"
+          }
+        },
+        "required": [
+          "carburant",
+          "litres",
+          "co2_kg",
+          "facteur"
+        ],
+        "title": "ReponseEmpreinte",
+        "type": "object"
+      },
       "ReponseGeocode": {
         "description": "Resultat d'un geocodage, avec son verdict d'ambiguite.",
         "properties": {
@@ -229,6 +851,135 @@
           "candidats"
         ],
         "title": "ReponseGeocode",
+        "type": "object"
+      },
+      "ReponseHistorique": {
+        "description": "L'historique des prix d'une station.\n\nLe grain etant « un changement de prix », cet historique est exactement ce que la\nsource a publie : aucun echantillonnage, aucun lissage.",
+        "properties": {
+          "carburant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "gazole"
+            ],
+            "title": "Carburant"
+          },
+          "changements": {
+            "items": {
+              "$ref": "#/components/schemas/ChangementPrix"
+            },
+            "title": "Changements",
+            "type": "array"
+          },
+          "depuis": {
+            "format": "date-time",
+            "title": "Depuis",
+            "type": "string"
+          },
+          "station_id": {
+            "examples": [
+              13008003
+            ],
+            "title": "Station Id",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Nombre de changements renvoyes.",
+            "examples": [
+              42
+            ],
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "station_id",
+          "depuis",
+          "total"
+        ],
+        "title": "ReponseHistorique",
+        "type": "object"
+      },
+      "ReponseMeilleure": {
+        "description": "Le classement par cout reel, et de quoi le verifier.",
+        "properties": {
+          "atteignables": {
+            "default": 0,
+            "description": "Nombre de stations atteignables trouvees.",
+            "examples": [
+              12
+            ],
+            "title": "Atteignables",
+            "type": "integer"
+          },
+          "avertissement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rempli quand la reponse demande une precaution : aucune station atteignable, autonomie trop faible, position hors de France.",
+            "examples": [
+              "Aucune station atteignable avec 20 km d'autonomie."
+            ],
+            "title": "Avertissement"
+          },
+          "economie_eur": {
+            "default": 0.0,
+            "description": "Ce qu'on gagne a aller a la meilleure plutot qu'a la plus proche. Jamais negatif : si la plus proche est la meilleure, il n'y a rien a gagner.",
+            "examples": [
+              1.42
+            ],
+            "title": "Economie Eur",
+            "type": "number"
+          },
+          "hypotheses": {
+            "$ref": "#/components/schemas/Hypotheses"
+          },
+          "la_plus_proche": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StationEvaluee"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "La station atteignable la plus proche : ce que ferait quelqu'un qui ne calcule pas. Sert de reference a l'economie."
+          },
+          "meilleure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StationEvaluee"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "La station au cout reel le plus bas. Absente si aucune n'est atteignable."
+          },
+          "stations": {
+            "description": "Les meilleures candidates, par cout reel croissant.",
+            "items": {
+              "$ref": "#/components/schemas/StationEvaluee"
+            },
+            "title": "Stations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "hypotheses"
+        ],
+        "title": "ReponseMeilleure",
         "type": "object"
       },
       "ReponseMeta": {
@@ -400,6 +1151,57 @@
         "title": "ReponseStationsProches",
         "type": "object"
       },
+      "ReponseTendance": {
+        "description": "Une serie journaliere, et ce sur quoi elle porte.",
+        "properties": {
+          "carburant": {
+            "examples": [
+              "gazole"
+            ],
+            "title": "Carburant",
+            "type": "string"
+          },
+          "dimension": {
+            "description": "`france`, `departement` ou `reseau`.",
+            "examples": [
+              "departement"
+            ],
+            "title": "Dimension",
+            "type": "string"
+          },
+          "jours": {
+            "description": "Profondeur demandee.",
+            "examples": [
+              90
+            ],
+            "title": "Jours",
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PointSerie"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "valeur": {
+            "description": "Le decoupage : vide pour la France, un code de departement, ou autoroute/route.",
+            "examples": [
+              "13"
+            ],
+            "title": "Valeur",
+            "type": "string"
+          }
+        },
+        "required": [
+          "carburant",
+          "dimension",
+          "valeur",
+          "jours"
+        ],
+        "title": "ReponseTendance",
+        "type": "object"
+      },
       "Rupture": {
         "description": "Un carburant indisponible dans cette station.",
         "properties": {
@@ -530,6 +1332,190 @@
           "attribution"
         ],
         "title": "Source",
+        "type": "object"
+      },
+      "StationEvaluee": {
+        "description": "Une station atteignable, avec le detail de son cout.",
+        "properties": {
+          "adresse": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "32 boulevard Schloesing"
+            ],
+            "title": "Adresse"
+          },
+          "autoroute": {
+            "default": false,
+            "examples": [
+              false
+            ],
+            "title": "Autoroute",
+            "type": "boolean"
+          },
+          "cout_detour_eur": {
+            "description": "Carburant brule pour l'aller-retour, valorise au prix de la station.",
+            "examples": [
+              0.79
+            ],
+            "title": "Cout Detour Eur",
+            "type": "number"
+          },
+          "cout_plein_eur": {
+            "description": "prix x litres.",
+            "examples": [
+              75.16
+            ],
+            "title": "Cout Plein Eur",
+            "type": "number"
+          },
+          "cout_reel_eur": {
+            "description": "La somme des deux. C'est sur ce chiffre que le classement se fait.",
+            "examples": [
+              75.95
+            ],
+            "title": "Cout Reel Eur",
+            "type": "number"
+          },
+          "cp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "13010"
+            ],
+            "title": "Cp"
+          },
+          "distance_routiere_km": {
+            "description": "Distance routiere **estimee** : la precedente, multipliee par le facteur de detour.",
+            "examples": [
+              2.99
+            ],
+            "minimum": 0.0,
+            "title": "Distance Routiere Km",
+            "type": "number"
+          },
+          "distance_vol_oiseau_km": {
+            "description": "Distance geodesique depuis la position donnee.",
+            "examples": [
+              2.3
+            ],
+            "minimum": 0.0,
+            "title": "Distance Vol Oiseau Km",
+            "type": "number"
+          },
+          "enseigne": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enseigne, quand OpenStreetMap la connait. Sinon la station s'identifie par son adresse.",
+            "examples": [
+              "TotalEnergies"
+            ],
+            "title": "Enseigne"
+          },
+          "fraicheur": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Fraicheur"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "frais"
+            ]
+          },
+          "id": {
+            "description": "Identifiant officiel de la station.",
+            "examples": [
+              13008003
+            ],
+            "title": "Id",
+            "type": "integer"
+          },
+          "latitude": {
+            "examples": [
+              43.2726
+            ],
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "examples": [
+              5.3846
+            ],
+            "title": "Longitude",
+            "type": "number"
+          },
+          "maj": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Date du dernier changement de ce prix.",
+            "examples": [
+              "2026-11-26T08:12:00Z"
+            ],
+            "title": "Maj"
+          },
+          "prix_eur_l": {
+            "examples": [
+              1.879
+            ],
+            "exclusiveMinimum": 0.0,
+            "title": "Prix Eur L",
+            "type": "number"
+          },
+          "ville": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Marseille"
+            ],
+            "title": "Ville"
+          }
+        },
+        "required": [
+          "id",
+          "latitude",
+          "longitude",
+          "distance_vol_oiseau_km",
+          "distance_routiere_km",
+          "prix_eur_l",
+          "cout_plein_eur",
+          "cout_detour_eur",
+          "cout_reel_eur"
+        ],
+        "title": "StationEvaluee",
         "type": "object"
       },
       "StationProche": {
@@ -720,6 +1706,122 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/empreinte": {
+      "get": {
+        "description": "Multiplie un volume par le facteur d'emission du carburant, tel que publie par la Base Carbone de l'ADEME.\n\n**Le facteur est rendu avec sa provenance complete** : libelle exact de l'ADEME, perimetre, periode de validite, version du jeu et URL. Un chiffre d'empreinte carbone sans sa source ne vaut rien.",
+        "operationId": "empreinte_v1_empreinte_get",
+        "parameters": [
+          {
+            "description": "Un des gazole, sp95, e10, sp98, e85, gplc.",
+            "in": "query",
+            "name": "carburant",
+            "required": true,
+            "schema": {
+              "description": "Un des gazole, sp95, e10, sp98, e85, gplc.",
+              "examples": [
+                "gazole"
+              ],
+              "title": "Carburant",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Volume du plein.",
+            "in": "query",
+            "name": "litres",
+            "required": false,
+            "schema": {
+              "default": 40.0,
+              "description": "Volume du plein.",
+              "examples": [
+                40.0
+              ],
+              "exclusiveMinimum": 0,
+              "maximum": 500.0,
+              "title": "Litres",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseEmpreinte"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Empreinte carbone d'un plein",
+        "tags": [
+          "tendances"
+        ]
+      }
+    },
+    "/v1/empreinte/comparaison": {
+      "get": {
+        "description": "Le meme volume, dans les six carburants, pour voir ce que change le choix du carburant. Attention : comparer litre pour litre n'est pas comparer kilometre pour kilometre -- un vehicule ne consomme pas le meme volume d'E85 que de gazole. Le champ `avertissement` le rappelle.",
+        "operationId": "comparaison_v1_empreinte_comparaison_get",
+        "parameters": [
+          {
+            "description": "Volume compare.",
+            "in": "query",
+            "name": "litres",
+            "required": false,
+            "schema": {
+              "default": 40.0,
+              "description": "Volume compare.",
+              "examples": [
+                40.0
+              ],
+              "exclusiveMinimum": 0,
+              "maximum": 500.0,
+              "title": "Litres",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseComparaison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Empreinte comparee des six carburants",
+        "tags": [
+          "tendances"
+        ]
+      }
+    },
     "/v1/geocode": {
       "get": {
         "description": "Transforme un texte libre en coordonnees, via la Geoplateforme IGN, en se limitant a la France.\n\n**Le champ `ambigu` est le plus important de la reponse.** Quand il vaut `true`, il ne faut pas choisir le premier candidat : il faut demander de preciser. « le Prado » a Marseille designe deux avenues distantes de 1,2 km dont les scores different de 0,009 point.\n\nLes resultats sont mis en cache 24 heures.",
@@ -831,6 +1933,143 @@
         "summary": "Etat de sante du service",
         "tags": [
           "service"
+        ]
+      }
+    },
+    "/v1/stations/meilleure": {
+      "get": {
+        "description": "**La station la moins chere n'est pas toujours la moins chere.** Faire six kilometres de plus pour gagner trois centimes au litre coute plus que ca ne rapporte. Cet endpoint classe les stations sur le cout reel :\n\n    cout_reel = prix x litres + prix x (2 x distance x consommation / 100)\n\n**Ce qui est ecarte** : les carburants en rupture, les prix perimes, les prix atypiques -- conserves et affiches ailleurs, mais on ne recommande pas un detour vers un prix dont on doute -- et les stations hors d'atteinte.\n\n**Les hypotheses du calcul sont dans la reponse**, champ `hypotheses` : aller-retour, carburant du trajet valorise au prix de la station, distance routiere estimee. Un chiffre qu'on ne peut pas refaire soi-meme n'a pas sa place devant quelqu'un qui va rouler sur la foi de ce qu'on lui dit.",
+        "operationId": "meilleure_v1_stations_meilleure_get",
+        "parameters": [
+          {
+            "description": "Latitude, en degres decimaux.",
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "description": "Latitude, en degres decimaux.",
+              "examples": [
+                43.2726
+              ],
+              "title": "Lat",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Longitude, en degres decimaux.",
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "description": "Longitude, en degres decimaux.",
+              "examples": [
+                5.3846
+              ],
+              "title": "Lon",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Un des gazole, sp95, e10, sp98, e85, gplc.",
+            "in": "query",
+            "name": "carburant",
+            "required": true,
+            "schema": {
+              "description": "Un des gazole, sp95, e10, sp98, e85, gplc.",
+              "examples": [
+                "gazole"
+              ],
+              "title": "Carburant",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Autonomie restante annoncee par le vehicule. On n'en consomme que 80 % : un tableau de bord est optimiste.",
+            "in": "query",
+            "name": "autonomie_km",
+            "required": false,
+            "schema": {
+              "default": 80.0,
+              "description": "Autonomie restante annoncee par le vehicule. On n'en consomme que 80 % : un tableau de bord est optimiste.",
+              "examples": [
+                80.0
+              ],
+              "exclusiveMinimum": 0,
+              "maximum": 1500.0,
+              "title": "Autonomie Km",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Volume du plein. Valeur pre-remplie, a ajuster ; ce n'est pas une moyenne mesuree.",
+            "in": "query",
+            "name": "litres",
+            "required": false,
+            "schema": {
+              "default": 40.0,
+              "description": "Volume du plein. Valeur pre-remplie, a ajuster ; ce n'est pas une moyenne mesuree.",
+              "examples": [
+                40.0
+              ],
+              "exclusiveMinimum": 0,
+              "maximum": 200,
+              "title": "Litres",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Consommation du vehicule. Meme statut que `litres`.",
+            "in": "query",
+            "name": "conso_l_100km",
+            "required": false,
+            "schema": {
+              "default": 7.0,
+              "description": "Consommation du vehicule. Meme statut que `litres`.",
+              "examples": [
+                7.0
+              ],
+              "maximum": 50,
+              "minimum": 0,
+              "title": "Conso L 100Km",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Nombre de stations renvoyees.",
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "description": "Nombre de stations renvoyees.",
+              "examples": [
+                5
+              ],
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limite",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseMeilleure"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Parametres invalides (problem+json)."
+          }
+        },
+        "summary": "La station au cout reel le plus bas, detour compris",
+        "tags": [
+          "stations"
         ]
       }
     },
@@ -962,6 +2201,270 @@
         "summary": "Stations autour d'un point",
         "tags": [
           "stations"
+        ]
+      }
+    },
+    "/v1/stations/{station_id}": {
+      "get": {
+        "description": "Tout ce qu'on sait d'une station : adresse, enseigne, services, horaires, et **tous** ses carburants.\n\nContrairement a une recherche, une fiche ne cache rien : les prix perimes et les carburants en rupture y figurent, avec leur date et leur etat. Un prix de deux mois n'est pas une raison de faire comme s'il n'existait pas, c'est une raison de le dater.\n\nL'enseigne vient d'OpenStreetMap (licence ODbL) et porte la facon dont elle a ete trouvee : un rapprochement geographique merite plus de prudence qu'une correspondance d'identifiant officiel.",
+        "operationId": "fiche_station_v1_stations__station_id__get",
+        "parameters": [
+          {
+            "description": "Identifiant officiel.",
+            "in": "path",
+            "name": "station_id",
+            "required": true,
+            "schema": {
+              "description": "Identifiant officiel.",
+              "examples": [
+                13008003
+              ],
+              "title": "Station Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FicheStation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Station inconnue (problem+json)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fiche complete d'une station",
+        "tags": [
+          "stations"
+        ]
+      }
+    },
+    "/v1/stations/{station_id}/historique": {
+      "get": {
+        "description": "Les changements de prix d'une station, du plus recent au plus ancien.\n\nLe grain de la base etant « un changement de prix », cet historique est **exactement ce que la source a publie** : aucun echantillonnage, aucun lissage, aucune interpolation. Entre deux changements, le prix n'a pas bouge.",
+        "operationId": "historique_station_v1_stations__station_id__historique_get",
+        "parameters": [
+          {
+            "description": "Identifiant officiel.",
+            "in": "path",
+            "name": "station_id",
+            "required": true,
+            "schema": {
+              "description": "Identifiant officiel.",
+              "examples": [
+                13008003
+              ],
+              "title": "Station Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Un seul carburant, ou tous si absent.",
+            "in": "query",
+            "name": "carburant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Un seul carburant, ou tous si absent.",
+              "examples": [
+                "gazole"
+              ],
+              "title": "Carburant"
+            }
+          },
+          {
+            "description": "Profondeur de l'historique.",
+            "in": "query",
+            "name": "jours",
+            "required": false,
+            "schema": {
+              "default": 365,
+              "description": "Profondeur de l'historique.",
+              "examples": [
+                90
+              ],
+              "maximum": 3650,
+              "minimum": 1,
+              "title": "Jours",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Nombre maximal de changements.",
+            "in": "query",
+            "name": "limite",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "description": "Nombre maximal de changements.",
+              "examples": [
+                500
+              ],
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limite",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseHistorique"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Station inconnue (problem+json)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Historique des prix d'une station",
+        "tags": [
+          "stations"
+        ]
+      }
+    },
+    "/v1/tendances": {
+      "get": {
+        "description": "Serie journaliere du prix d'un carburant, en France, dans un departement ou sur un reseau.\n\n**Ces moyennes portent sur les prix en vigueur chaque jour, pas sur les seuls prix modifies ce jour-la.** La distinction n'est pas un detail : le flux ne publie que les changements, et moyenner les changements reviendrait a ne compter que les stations qui bougent souvent leurs prix.\n\nSont ecartes du calcul les prix atypiques, les prix perimes et les carburants en rupture. Le champ `exclus` compte les prix atypiques ecartes : un agregat doit dire sur quoi il ne porte pas.\n\nLes premiers jours d'une periode amorcee reposent sur un historique encore incomplet : leur champ `stations` est nettement plus bas, c'est a cela qu'on les reconnait.",
+        "operationId": "tendances_v1_tendances_get",
+        "parameters": [
+          {
+            "description": "Un des gazole, sp95, e10, sp98, e85, gplc.",
+            "in": "query",
+            "name": "carburant",
+            "required": true,
+            "schema": {
+              "description": "Un des gazole, sp95, e10, sp98, e85, gplc.",
+              "examples": [
+                "gazole"
+              ],
+              "title": "Carburant",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Code departement (`13`, `2A`). Absent : la France entiere.",
+            "in": "query",
+            "name": "departement",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Code departement (`13`, `2A`). Absent : la France entiere.",
+              "examples": [
+                "13"
+              ],
+              "title": "Departement"
+            }
+          },
+          {
+            "description": "`autoroute` ou `route`. Incompatible avec `departement`.",
+            "in": "query",
+            "name": "reseau",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`autoroute` ou `route`. Incompatible avec `departement`.",
+              "examples": [
+                "autoroute"
+              ],
+              "title": "Reseau"
+            }
+          },
+          {
+            "description": "Profondeur de la serie.",
+            "in": "query",
+            "name": "jours",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "description": "Profondeur de la serie.",
+              "examples": [
+                90
+              ],
+              "maximum": 3650,
+              "minimum": 1,
+              "title": "Jours",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseTendance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evolution du prix d'un carburant",
+        "tags": [
+          "tendances"
         ]
       }
     }

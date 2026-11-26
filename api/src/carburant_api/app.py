@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from carburant_api import erreurs
+from carburant_api.limite import MiddlewareLimite
 from carburant_api.requetes.connexion import creer_pool
 from carburant_api.routes import geocode, meta, sante, stations, tendances
 from carburant_api.version import DESCRIPTION, PREFIXE, TITRE, VERSION
@@ -69,6 +70,11 @@ def creer_app() -> FastAPI:
         docs_url="/docs",
         redoc_url=None,
     )
+    # L'ordre compte : Starlette enveloppe les middlewares dans l'ordre inverse de
+    # leur ajout, donc le dernier ajoute est le plus exterieur. CORS doit etre
+    # au-dessus de la limitation de debit, sinon un 429 arriverait sans ses en-tetes
+    # CORS et le navigateur l'afficherait comme une erreur reseau au lieu du message.
+    app.add_middleware(MiddlewareLimite)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origines_autorisees(),

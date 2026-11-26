@@ -4,6 +4,48 @@
  */
 
 export interface paths {
+    "/v1/empreinte": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Empreinte carbone d'un plein
+         * @description Multiplie un volume par le facteur d'emission du carburant, tel que publie par la Base Carbone de l'ADEME.
+         *
+         *     **Le facteur est rendu avec sa provenance complete** : libelle exact de l'ADEME, perimetre, periode de validite, version du jeu et URL. Un chiffre d'empreinte carbone sans sa source ne vaut rien.
+         */
+        get: operations["empreinte_v1_empreinte_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/empreinte/comparaison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Empreinte comparee des six carburants
+         * @description Le meme volume, dans les six carburants, pour voir ce que change le choix du carburant. Attention : comparer litre pour litre n'est pas comparer kilometre pour kilometre -- un vehicule ne consomme pas le meme volume d'E85 que de gazole. Le champ `avertissement` le rappelle.
+         */
+        get: operations["comparaison_v1_empreinte_comparaison_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/geocode": {
         parameters: {
             query?: never;
@@ -68,6 +110,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/stations/meilleure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * La station au cout reel le plus bas, detour compris
+         * @description **La station la moins chere n'est pas toujours la moins chere.** Faire six kilometres de plus pour gagner trois centimes au litre coute plus que ca ne rapporte. Cet endpoint classe les stations sur le cout reel :
+         *
+         *         cout_reel = prix x litres + prix x (2 x distance x consommation / 100)
+         *
+         *     **Ce qui est ecarte** : les carburants en rupture, les prix perimes, les prix atypiques -- conserves et affiches ailleurs, mais on ne recommande pas un detour vers un prix dont on doute -- et les stations hors d'atteinte.
+         *
+         *     **Les hypotheses du calcul sont dans la reponse**, champ `hypotheses` : aller-retour, carburant du trajet valorise au prix de la station, distance routiere estimee. Un chiffre qu'on ne peut pas refaire soi-meme n'a pas sa place devant quelqu'un qui va rouler sur la foi de ce qu'on lui dit.
+         */
+        get: operations["meilleure_v1_stations_meilleure_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/stations/proches": {
         parameters: {
             query?: never;
@@ -84,6 +152,78 @@ export interface paths {
          *     La distance est a vol d'oiseau. Le trajet reel est plus long : `/v1/stations/meilleure` tiendra compte du detour.
          */
         get: operations["proches_v1_stations_proches_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stations/{station_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fiche complete d'une station
+         * @description Tout ce qu'on sait d'une station : adresse, enseigne, services, horaires, et **tous** ses carburants.
+         *
+         *     Contrairement a une recherche, une fiche ne cache rien : les prix perimes et les carburants en rupture y figurent, avec leur date et leur etat. Un prix de deux mois n'est pas une raison de faire comme s'il n'existait pas, c'est une raison de le dater.
+         *
+         *     L'enseigne vient d'OpenStreetMap (licence ODbL) et porte la facon dont elle a ete trouvee : un rapprochement geographique merite plus de prudence qu'une correspondance d'identifiant officiel.
+         */
+        get: operations["fiche_station_v1_stations__station_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stations/{station_id}/historique": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Historique des prix d'une station
+         * @description Les changements de prix d'une station, du plus recent au plus ancien.
+         *
+         *     Le grain de la base etant « un changement de prix », cet historique est **exactement ce que la source a publie** : aucun echantillonnage, aucun lissage, aucune interpolation. Entre deux changements, le prix n'a pas bouge.
+         */
+        get: operations["historique_station_v1_stations__station_id__historique_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tendances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Evolution du prix d'un carburant
+         * @description Serie journaliere du prix d'un carburant, en France, dans un departement ou sur un reseau.
+         *
+         *     **Ces moyennes portent sur les prix en vigueur chaque jour, pas sur les seuls prix modifies ce jour-la.** La distinction n'est pas un detail : le flux ne publie que les changements, et moyenner les changements reviendrait a ne compter que les stations qui bougent souvent leurs prix.
+         *
+         *     Sont ecartes du calcul les prix atypiques, les prix perimes et les carburants en rupture. Le champ `exclus` compte les prix atypiques ecartes : un agregat doit dire sur quoi il ne porte pas.
+         *
+         *     Les premiers jours d'une periode amorcee reposent sur un historique encore incomplet : leur champ `stations` est nettement plus bas, c'est a cela qu'on les reconnait.
+         */
+        get: operations["tendances_v1_tendances_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -139,6 +279,240 @@ export interface components {
             ville?: string | null;
         };
         /**
+         * ChangementPrix
+         * @description Un changement de prix, tel que la source l'a publie.
+         */
+        ChangementPrix: {
+            /**
+             * Carburant
+             * @example gazole
+             */
+            carburant: string;
+            /**
+             * Maj
+             * Format: date-time
+             * @example 2026-11-25T08:12:00Z
+             */
+            maj: string;
+            /**
+             * Prix Eur L
+             * @example 1.879
+             */
+            prix_eur_l: number;
+        };
+        /**
+         * Empreinte
+         * @description L'empreinte d'un carburant pour le volume compare.
+         */
+        Empreinte: {
+            /**
+             * Carburant
+             * @example e85
+             */
+            carburant: string;
+            /**
+             * Co2 Kg
+             * @example 44.4
+             */
+            co2_kg: number;
+            /**
+             * Facteur Kg Co2E Par Litre
+             * @example 1.11
+             */
+            facteur_kg_co2e_par_litre: number;
+        };
+        /**
+         * Enseigne
+         * @description L'enseigne d'une station, avec la facon dont elle a ete trouvee.
+         *
+         *     Le flux officiel ne contient ni nom ni enseigne : celles-ci viennent
+         *     d'OpenStreetMap, sous licence ODbL. La provenance est rendue avec la valeur pour
+         *     que l'affichage puisse en tenir compte -- un rapprochement geographique merite
+         *     plus de prudence qu'une correspondance d'identifiant.
+         */
+        Enseigne: {
+            /**
+             * Nom
+             * @example TotalEnergies
+             */
+            nom: string;
+            /**
+             * Objet Osm
+             * @description Objet OpenStreetMap rapproche, pour pouvoir verifier.
+             * @example node/144574
+             */
+            objet_osm?: string | null;
+            /**
+             * Score
+             * @description 1,0 pour un rapprochement par identifiant ; degrade selon la distance sinon.
+             * @example 1
+             */
+            score?: number | null;
+            /**
+             * Source
+             * @description `osm-reference` quand OpenStreetMap portait l identifiant officiel de la station, `osm-spatial` quand le rapprochement est geographique.
+             * @example osm-reference
+             */
+            source: string;
+        };
+        /**
+         * FacteurEmission
+         * @description Un facteur d'emission, avec sa provenance complete.
+         *
+         *     Sans provenance, un chiffre d'empreinte carbone n'est pas verifiable : c'est
+         *     l'ADEME qui le publie, pas nous.
+         */
+        FacteurEmission: {
+            /**
+             * Carburant
+             * @example gazole
+             */
+            carburant: string;
+            /**
+             * Libelle Ademe
+             * @description Libelle exact publie par l'ADEME, recopie sans retouche.
+             * @example Gazole routier / B7
+             */
+            libelle_ademe: string;
+            /**
+             * Localisation
+             * @example France continentale
+             */
+            localisation?: string | null;
+            /**
+             * Periode Validite
+             * @example déc-20
+             */
+            periode_validite?: string | null;
+            /**
+             * Statut
+             * @example Valide générique
+             */
+            statut?: string | null;
+            /**
+             * Unite
+             * @example kgCO2e/litre
+             */
+            unite: string;
+            /**
+             * Url
+             * @example https://data.ademe.fr/data-fair/api/v1/datasets/base-carboner/lines?...
+             */
+            url: string;
+            /**
+             * Valeur Kg Co2E Par Litre
+             * @example 3.1
+             */
+            valeur_kg_co2e_par_litre: number;
+            /**
+             * Version Base
+             * @description Date de derniere modification du jeu ADEME : la Base Carbone n'expose pas de numero de version.
+             * @example 2026-06-30T10:17:08.470Z
+             */
+            version_base: string;
+        };
+        /**
+         * FicheStation
+         * @description Tout ce qu'on sait d'une station.
+         *
+         *     Contrairement a une recherche, une fiche **ne cache rien** : elle montre aussi
+         *     les prix perimes et les carburants en rupture, avec leur date et leur etat. Un
+         *     prix de deux mois n'est pas une raison de faire comme s'il n'existait pas ; c'est
+         *     une raison de le dater.
+         */
+        FicheStation: {
+            /**
+             * Active
+             * @description Fausse quand la station a disparu du flux. Elle n'est jamais supprimee.
+             * @example true
+             */
+            active: boolean;
+            /**
+             * Adresse
+             * @example 32 boulevard Schloesing
+             */
+            adresse?: string | null;
+            /**
+             * Autoroute
+             * @default false
+             * @example false
+             */
+            autoroute: boolean;
+            /**
+             * Code Departement
+             * @example 13
+             */
+            code_departement?: string | null;
+            /**
+             * Cp
+             * @example 13010
+             */
+            cp?: string | null;
+            /**
+             * Departement
+             * @example Bouches-du-Rhône
+             */
+            departement?: string | null;
+            /**
+             * Derniere Vue
+             * Format: date-time
+             * @description Derniere collecte ou elle etait presente.
+             */
+            derniere_vue: string;
+            /** @description Absente quand OpenStreetMap ne connait pas cette station. */
+            enseigne?: components["schemas"]["Enseigne"] | null;
+            /**
+             * Horaires
+             * @description Horaires normalises tels que publies par le flux.
+             */
+            horaires?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Id
+             * @example 13008003
+             */
+            id: number;
+            /**
+             * Latitude
+             * @example 43.2726
+             */
+            latitude: number;
+            /**
+             * Longitude
+             * @example 5.3846
+             */
+            longitude: number;
+            /**
+             * Premiere Vue
+             * Format: date-time
+             * @description Premiere fois que cette station apparait dans nos donnees.
+             */
+            premiere_vue: string;
+            /**
+             * Prix
+             * @description Tous les carburants connus, perimes et ruptures compris.
+             */
+            prix?: components["schemas"]["PrixCarburant"][];
+            /**
+             * Region
+             * @example Provence-Alpes-Côte d'Azur
+             */
+            region?: string | null;
+            /**
+             * Services
+             * @example [
+             *       "Automate CB 24/24"
+             *     ]
+             */
+            services?: string[];
+            /**
+             * Ville
+             * @example Marseille
+             */
+            ville?: string | null;
+        };
+        /**
          * Fraicheur
          * @description Age d'un prix, en quatre classes.
          *
@@ -152,6 +526,92 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * Hypotheses
+         * @description Ce que le calcul suppose, dit explicitement.
+         */
+        Hypotheses: {
+            /**
+             * Aller Retour
+             * @description Le detour est compte a l'aller **et** au retour. Vrai pour qui fait un detour expres, faux pour qui fait le plein sur sa route.
+             * @default true
+             */
+            aller_retour: boolean;
+            /**
+             * Consommation L 100Km
+             * @description Consommation retenue, en litres aux 100 km.
+             * @example 7
+             */
+            consommation_l_100km: number;
+            /**
+             * Facteur Detour
+             * @description Rapport applique entre distance a vol d'oiseau et distance routiere estimee. Valeur de depart, non encore calibree contre un service d'itineraire.
+             * @example 1.3
+             */
+            facteur_detour: number;
+            /**
+             * Litres
+             * @description Volume du plein retenu, en litres.
+             * @example 40
+             */
+            litres: number;
+            /**
+             * Marge Autonomie
+             * @description Part de l'autonomie annoncee qu'on s'autorise a consommer. L'autonomie d'un tableau de bord est optimiste.
+             * @example 0.8
+             */
+            marge_autonomie: number;
+            /**
+             * Prix Du Trajet
+             * @description Comment le carburant du detour est valorise.
+             * @default Le carburant brule pendant le trajet est valorise au prix de la station visee. C'est une approximation : il vient en realite du reservoir, achete ailleurs.
+             */
+            prix_du_trajet: string;
+        };
+        /**
+         * PointSerie
+         * @description Un jour d'une serie de prix.
+         */
+        PointSerie: {
+            /**
+             * Exclus
+             * @description Prix atypiques ecartes du calcul mais comptes.
+             * @example 106
+             */
+            exclus: number;
+            /**
+             * Jour
+             * Format: date
+             * @example 2026-11-25
+             */
+            jour: string;
+            /**
+             * Prix Max Eur L
+             * @example 2.319
+             */
+            prix_max_eur_l: number;
+            /**
+             * Prix Median Eur L
+             * @example 1.879
+             */
+            prix_median_eur_l: number;
+            /**
+             * Prix Min Eur L
+             * @example 1.629
+             */
+            prix_min_eur_l: number;
+            /**
+             * Prix Moyen Eur L
+             * @example 1.884
+             */
+            prix_moyen_eur_l: number;
+            /**
+             * Stations
+             * @description Nombre de prix retenus ce jour-la. Nettement plus bas sur les premiers jours d'une periode amorcee : l'historique n'y est pas encore complet.
+             * @example 8742
+             */
+            stations: number;
         };
         /**
          * PrixCarburant
@@ -185,6 +645,54 @@ export interface components {
             rupture?: components["schemas"]["Rupture"] | null;
         };
         /**
+         * ReponseComparaison
+         * @description Les six carburants au meme volume, du moins emetteur au plus emetteur.
+         */
+        ReponseComparaison: {
+            /**
+             * Avertissement
+             * @description Ce que la comparaison ne dit pas.
+             * @example Comparaison a volume egal, pas a distance egale.
+             */
+            avertissement: string;
+            /** Empreintes */
+            empreintes?: components["schemas"]["Empreinte"][];
+            /**
+             * Litres
+             * @example 40
+             */
+            litres: number;
+            /**
+             * Source
+             * @description Version du jeu ADEME dont sont tires les facteurs.
+             * @example 2026-06-30T10:17:08.470Z
+             */
+            source: string;
+        };
+        /**
+         * ReponseEmpreinte
+         * @description L'empreinte d'un plein, et d'ou vient le facteur.
+         */
+        ReponseEmpreinte: {
+            /**
+             * Carburant
+             * @example gazole
+             */
+            carburant: string;
+            /**
+             * Co2 Kg
+             * @description litres x facteur.
+             * @example 124
+             */
+            co2_kg: number;
+            facteur: components["schemas"]["FacteurEmission"];
+            /**
+             * Litres
+             * @example 40
+             */
+            litres: number;
+        };
+        /**
          * ReponseGeocode
          * @description Resultat d'un geocodage, avec son verdict d'ambiguite.
          */
@@ -212,6 +720,74 @@ export interface components {
              * @example le Prado, Marseille
              */
             requete: string;
+        };
+        /**
+         * ReponseHistorique
+         * @description L'historique des prix d'une station.
+         *
+         *     Le grain etant « un changement de prix », cet historique est exactement ce que la
+         *     source a publie : aucun echantillonnage, aucun lissage.
+         */
+        ReponseHistorique: {
+            /**
+             * Carburant
+             * @example gazole
+             */
+            carburant?: string | null;
+            /** Changements */
+            changements?: components["schemas"]["ChangementPrix"][];
+            /**
+             * Depuis
+             * Format: date-time
+             */
+            depuis: string;
+            /**
+             * Station Id
+             * @example 13008003
+             */
+            station_id: number;
+            /**
+             * Total
+             * @description Nombre de changements renvoyes.
+             * @example 42
+             */
+            total: number;
+        };
+        /**
+         * ReponseMeilleure
+         * @description Le classement par cout reel, et de quoi le verifier.
+         */
+        ReponseMeilleure: {
+            /**
+             * Atteignables
+             * @description Nombre de stations atteignables trouvees.
+             * @default 0
+             * @example 12
+             */
+            atteignables: number;
+            /**
+             * Avertissement
+             * @description Rempli quand la reponse demande une precaution : aucune station atteignable, autonomie trop faible, position hors de France.
+             * @example Aucune station atteignable avec 20 km d'autonomie.
+             */
+            avertissement?: string | null;
+            /**
+             * Economie Eur
+             * @description Ce qu'on gagne a aller a la meilleure plutot qu'a la plus proche. Jamais negatif : si la plus proche est la meilleure, il n'y a rien a gagner.
+             * @default 0
+             * @example 1.42
+             */
+            economie_eur: number;
+            hypotheses: components["schemas"]["Hypotheses"];
+            /** @description La station atteignable la plus proche : ce que ferait quelqu'un qui ne calcule pas. Sert de reference a l'economie. */
+            la_plus_proche?: components["schemas"]["StationEvaluee"] | null;
+            /** @description La station au cout reel le plus bas. Absente si aucune n'est atteignable. */
+            meilleure?: components["schemas"]["StationEvaluee"] | null;
+            /**
+             * Stations
+             * @description Les meilleures candidates, par cout reel croissant.
+             */
+            stations?: components["schemas"]["StationEvaluee"][];
         };
         /**
          * ReponseMeta
@@ -305,6 +881,37 @@ export interface components {
             tri: string;
         };
         /**
+         * ReponseTendance
+         * @description Une serie journaliere, et ce sur quoi elle porte.
+         */
+        ReponseTendance: {
+            /**
+             * Carburant
+             * @example gazole
+             */
+            carburant: string;
+            /**
+             * Dimension
+             * @description `france`, `departement` ou `reseau`.
+             * @example departement
+             */
+            dimension: string;
+            /**
+             * Jours
+             * @description Profondeur demandee.
+             * @example 90
+             */
+            jours: number;
+            /** Points */
+            points?: components["schemas"]["PointSerie"][];
+            /**
+             * Valeur
+             * @description Le decoupage : vide pour la France, un code de departement, ou autoroute/route.
+             * @example 13
+             */
+            valeur: string;
+        };
+        /**
          * Rupture
          * @description Un carburant indisponible dans cette station.
          */
@@ -376,6 +983,98 @@ export interface components {
             nom: string;
             /** Url */
             url: string;
+        };
+        /**
+         * StationEvaluee
+         * @description Une station atteignable, avec le detail de son cout.
+         */
+        StationEvaluee: {
+            /**
+             * Adresse
+             * @example 32 boulevard Schloesing
+             */
+            adresse?: string | null;
+            /**
+             * Autoroute
+             * @default false
+             * @example false
+             */
+            autoroute: boolean;
+            /**
+             * Cout Detour Eur
+             * @description Carburant brule pour l'aller-retour, valorise au prix de la station.
+             * @example 0.79
+             */
+            cout_detour_eur: number;
+            /**
+             * Cout Plein Eur
+             * @description prix x litres.
+             * @example 75.16
+             */
+            cout_plein_eur: number;
+            /**
+             * Cout Reel Eur
+             * @description La somme des deux. C'est sur ce chiffre que le classement se fait.
+             * @example 75.95
+             */
+            cout_reel_eur: number;
+            /**
+             * Cp
+             * @example 13010
+             */
+            cp?: string | null;
+            /**
+             * Distance Routiere Km
+             * @description Distance routiere **estimee** : la precedente, multipliee par le facteur de detour.
+             * @example 2.99
+             */
+            distance_routiere_km: number;
+            /**
+             * Distance Vol Oiseau Km
+             * @description Distance geodesique depuis la position donnee.
+             * @example 2.3
+             */
+            distance_vol_oiseau_km: number;
+            /**
+             * Enseigne
+             * @description Enseigne, quand OpenStreetMap la connait. Sinon la station s'identifie par son adresse.
+             * @example TotalEnergies
+             */
+            enseigne?: string | null;
+            /** @example frais */
+            fraicheur?: components["schemas"]["Fraicheur"] | null;
+            /**
+             * Id
+             * @description Identifiant officiel de la station.
+             * @example 13008003
+             */
+            id: number;
+            /**
+             * Latitude
+             * @example 43.2726
+             */
+            latitude: number;
+            /**
+             * Longitude
+             * @example 5.3846
+             */
+            longitude: number;
+            /**
+             * Maj
+             * @description Date du dernier changement de ce prix.
+             * @example 2026-11-26T08:12:00Z
+             */
+            maj?: string | null;
+            /**
+             * Prix Eur L
+             * @example 1.879
+             */
+            prix_eur_l: number;
+            /**
+             * Ville
+             * @example Marseille
+             */
+            ville?: string | null;
         };
         /**
          * StationProche
@@ -465,6 +1164,72 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    empreinte_v1_empreinte_get: {
+        parameters: {
+            query: {
+                /** @description Un des gazole, sp95, e10, sp98, e85, gplc. */
+                carburant: string;
+                /** @description Volume du plein. */
+                litres?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReponseEmpreinte"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    comparaison_v1_empreinte_comparaison_get: {
+        parameters: {
+            query?: {
+                /** @description Volume compare. */
+                litres?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReponseComparaison"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     geocode_v1_geocode_get: {
         parameters: {
             query: {
@@ -553,6 +1318,48 @@ export interface operations {
             };
         };
     };
+    meilleure_v1_stations_meilleure_get: {
+        parameters: {
+            query: {
+                /** @description Latitude, en degres decimaux. */
+                lat: number;
+                /** @description Longitude, en degres decimaux. */
+                lon: number;
+                /** @description Un des gazole, sp95, e10, sp98, e85, gplc. */
+                carburant: string;
+                /** @description Autonomie restante annoncee par le vehicule. On n'en consomme que 80 % : un tableau de bord est optimiste. */
+                autonomie_km?: number;
+                /** @description Volume du plein. Valeur pre-remplie, a ajuster ; ce n'est pas une moyenne mesuree. */
+                litres?: number;
+                /** @description Consommation du vehicule. Meme statut que `litres`. */
+                conso_l_100km?: number;
+                /** @description Nombre de stations renvoyees. */
+                limite?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReponseMeilleure"];
+                };
+            };
+            /** @description Parametres invalides (problem+json). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     proches_v1_stations_proches_get: {
         parameters: {
             query: {
@@ -592,6 +1399,129 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    fiche_station_v1_stations__station_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant officiel. */
+                station_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FicheStation"];
+                };
+            };
+            /** @description Station inconnue (problem+json). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    historique_station_v1_stations__station_id__historique_get: {
+        parameters: {
+            query?: {
+                /** @description Un seul carburant, ou tous si absent. */
+                carburant?: string | null;
+                /** @description Profondeur de l'historique. */
+                jours?: number;
+                /** @description Nombre maximal de changements. */
+                limite?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Identifiant officiel. */
+                station_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReponseHistorique"];
+                };
+            };
+            /** @description Station inconnue (problem+json). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tendances_v1_tendances_get: {
+        parameters: {
+            query: {
+                /** @description Un des gazole, sp95, e10, sp98, e85, gplc. */
+                carburant: string;
+                /** @description Code departement (`13`, `2A`). Absent : la France entiere. */
+                departement?: string | null;
+                /** @description `autoroute` ou `route`. Incompatible avec `departement`. */
+                reseau?: string | null;
+                /** @description Profondeur de la serie. */
+                jours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReponseTendance"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

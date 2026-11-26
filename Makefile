@@ -90,8 +90,12 @@ captures-brutes:
 
 # ----------------------------------------------------------------- contrat d'API
 openapi: ## Ecrit le schema OpenAPI dans web/openapi.json
+	@# Le saut de ligne final n'est pas cosmetique : `end-of-file-fixer` de
+	@# pre-commit l'ajoute au fichier commite. Sans lui ici, le job `contrat` de la
+	@# CI regenererait un fichier different du depot a ce seul octet pres.
 	$(UV) python -c "import json,sys; from carburant_api.app import app; \
-		json.dump(app.openapi(), sys.stdout, ensure_ascii=False, indent=2, sort_keys=True)" \
+		json.dump(app.openapi(), sys.stdout, ensure_ascii=False, indent=2, sort_keys=True); \
+		sys.stdout.write(chr(10))" \
 		> web/openapi.json
 	@echo "web/openapi.json ecrit."
 

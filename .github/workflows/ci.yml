@@ -138,6 +138,52 @@ jobs:
             exit 1
           fi
 
+  contrat:
+    name: Contrat — OpenAPI et client TypeScript a jour
+    runs-on: ubuntu-latest
+    # Le client TypeScript du front et les schemas du serveur MCP sont **generes**
+    # depuis l'OpenAPI. Un endpoint ajoute sans regenerer laisse le front typer
+    # contre un contrat perime : le compilateur dit oui, l'appel echoue a l'execution.
+    # On regenere ici et on exige que rien ne bouge.
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Installer Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Synchroniser le workspace
+        run: uv sync --all-packages --frozen
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Installer les dependances du front
+        run: cd web && pnpm install --frozen-lockfile
+
+      - name: Regenerer le contrat
+        run: make client-api
+
+      - name: Exiger qu'il soit identique a celui du depot
+        run: |
+          set -eu
+          if ! git diff --exit-code -- web/openapi.json web/app/api/genere/; then
+            echo "::error::Le contrat d'API a change sans etre regenere. Lancez 'make client-api' et commitez."
+            exit 1
+          fi
+          echo "Contrat a jour."
+
   infra:
     name: Infra — compose, Caddy, cron
     runs-on: ubuntu-latest
