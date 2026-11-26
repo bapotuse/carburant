@@ -14,7 +14,10 @@ from typing import Annotated, Any, Final
 from fastapi import APIRouter, Query, Request, Response, status
 
 from carburant_api.cache import poser_entetes
+from carburant_api.calcul import cout
 from carburant_api.erreurs import BASE_TYPE, ProblemeAPI
+from carburant_api.requetes.meilleure import AUTONOMIE_MAX_KM, RechercheMeilleure
+from carburant_api.requetes.meilleure import candidates as candidates_meilleure
 from carburant_api.requetes.stations import (
     LIMITE_MAX,
     RAYON_MAX_KM,
@@ -23,6 +26,7 @@ from carburant_api.requetes.stations import (
     lire_meta,
     stations_proches,
 )
+from carburant_api.schemas.meilleure import Hypotheses, ReponseMeilleure, StationEvaluee
 from carburant_api.schemas.station import (
     PrixCarburant,
     ReponseStationsProches,
@@ -40,6 +44,26 @@ CARBURANTS: Final = ("gazole", "sp95", "e10", "sp98", "e85", "gplc")
 # renverra jamais rien, autant le dire franchement.
 EMPRISE_LAT: Final = (41.0, 51.5)
 EMPRISE_LON: Final = (-5.5, 10.0)
+
+
+def _verifier_emprise(lat: float, lon: float) -> None:
+    """Refuse une position hors de l'emprise couverte, en disant pourquoi.
+
+    Le flux officiel ne contient aucune station d'outre-mer : une recherche aux
+    Antilles ne renverra jamais rien. Autant le dire franchement plutot que de
+    rendre une liste vide.
+    """
+    if not (EMPRISE_LAT[0] <= lat <= EMPRISE_LAT[1] and EMPRISE_LON[0] <= lon <= EMPRISE_LON[1]):
+        raise ProblemeAPI(
+            statut=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            titre="Position hors de France metropolitaine",
+            detail=(
+                f"La position ({lat}, {lon}) est hors de l'emprise couverte. Le flux "
+                "officiel ne contient que la France metropolitaine et la Corse : "
+                "aucune station d'outre-mer n'y figure."
+            ),
+            type_=f"{BASE_TYPE}#position-hors-emprise",
+        )
 
 
 def _duree_cache() -> int:
@@ -155,17 +179,7 @@ async def proches(
     ] = 0,
 ) -> ReponseStationsProches:
     """Les stations autour d'un point, triees par prix ou par distance."""
-    if not (EMPRISE_LAT[0] <= lat <= EMPRISE_LAT[1] and EMPRISE_LON[0] <= lon <= EMPRISE_LON[1]):
-        raise ProblemeAPI(
-            statut=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            titre="Position hors de France metropolitaine",
-            detail=(
-                f"La position ({lat}, {lon}) est hors de l'emprise couverte. Le flux "
-                "officiel ne contient que la France metropolitaine et la Corse : "
-                "aucune station d'outre-mer n'y figure."
-            ),
-            type_=f"{BASE_TYPE}#position-hors-emprise",
-        )
+    _verifier_emprise(lat, lon)
 
     if carburant is not None and carburant not in CARBURANTS:
         raise ProblemeAPI(
@@ -203,6 +217,166 @@ async def proches(
         carburant=carburant,
         tri=tri,
         derniere_collecte=meta.derniere_collecte,
+    )
+    poser_entetes(reponse, corps, max_age=_duree_cache())
+    return corps
+
+
+def _evaluer(
+    ligne: dict[str, Any], *, litres: float, consommation: float
+) -> tuple[StationEvaluee, cout.Detail]:
+    """Transforme une ligne de la base en station evaluee, cout compris."""
+    vol_oiseau = float(ligne["distance_vol_oiseau_km"])
+    routiere = cout.distance_routiere(vol_oiseau)
+    detail = cout.detail(
+        prix_eur_l=float(ligne["prix"]),
+        distance_km=routiere,
+        litres=litres,
+        consommation_l_100km=consommation,
+    )
+    evaluee = StationEvaluee(
+        id=int(ligne["id"]),
+        adresse=ligne["adresse"],
+        ville=ligne["ville"],
+        cp=ligne["cp"],
+        enseigne=ligne["enseigne"],
+        autoroute=bool(ligne["autoroute"]),
+        latitude=float(ligne["latitude"]),
+        longitude=float(ligne["longitude"]),
+        distance_vol_oiseau_km=round(vol_oiseau, 3),
+        distance_routiere_km=round(routiere, 3),
+        prix_eur_l=detail.prix_eur_l,
+        maj=ligne["maj"],
+        fraicheur=ligne["fraicheur"],
+        cout_plein_eur=round(detail.cout_plein_eur, 2),
+        cout_detour_eur=round(detail.cout_detour_eur, 2),
+        cout_reel_eur=round(detail.cout_reel_eur, 2),
+    )
+    return evaluee, detail
+
+
+@routeur.get(
+    "/meilleure",
+    summary="La station au cout reel le plus bas, detour compris",
+    description=(
+        "**La station la moins chere n'est pas toujours la moins chere.** Faire six "
+        "kilometres de plus pour gagner trois centimes au litre coute plus que ca ne "
+        "rapporte. Cet endpoint classe les stations sur le cout reel :\n\n"
+        "    cout_reel = prix x litres + prix x (2 x distance x consommation / 100)\n\n"
+        "**Ce qui est ecarte** : les carburants en rupture, les prix perimes, les prix "
+        "atypiques -- conserves et affiches ailleurs, mais on ne recommande pas un "
+        "detour vers un prix dont on doute -- et les stations hors d'atteinte.\n\n"
+        "**Les hypotheses du calcul sont dans la reponse**, champ `hypotheses` : "
+        "aller-retour, carburant du trajet valorise au prix de la station, distance "
+        "routiere estimee. Un chiffre qu'on ne peut pas refaire soi-meme n'a pas sa "
+        "place devant quelqu'un qui va rouler sur la foi de ce qu'on lui dit."
+    ),
+    response_model=ReponseMeilleure,
+    responses={
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "description": "Parametres invalides (problem+json)."
+        }
+    },
+)
+async def meilleure(
+    requete: Request,
+    reponse: Response,
+    lat: Annotated[float, Query(description="Latitude, en degres decimaux.", examples=[43.2726])],
+    lon: Annotated[float, Query(description="Longitude, en degres decimaux.", examples=[5.3846])],
+    carburant: Annotated[
+        str, Query(description=f"Un des {', '.join(CARBURANTS)}.", examples=["gazole"])
+    ],
+    autonomie_km: Annotated[
+        float,
+        Query(
+            gt=0,
+            le=AUTONOMIE_MAX_KM,
+            description=(
+                "Autonomie restante annoncee par le vehicule. On n'en consomme que "
+                "80 % : un tableau de bord est optimiste."
+            ),
+            examples=[80.0],
+        ),
+    ] = 80.0,
+    litres: Annotated[
+        float,
+        Query(
+            gt=0,
+            le=200,
+            description="Volume du plein. Valeur pre-remplie, a ajuster ; ce n'est pas une moyenne mesuree.",
+            examples=[40.0],
+        ),
+    ] = cout.LITRES_PAR_DEFAUT,
+    conso_l_100km: Annotated[
+        float,
+        Query(
+            ge=0,
+            le=50,
+            description="Consommation du vehicule. Meme statut que `litres`.",
+            examples=[7.0],
+        ),
+    ] = cout.CONSOMMATION_PAR_DEFAUT,
+    limite: Annotated[
+        int, Query(ge=1, le=20, description="Nombre de stations renvoyees.", examples=[5])
+    ] = 5,
+) -> ReponseMeilleure:
+    """Classe les stations atteignables par cout reel."""
+    if carburant not in CARBURANTS:
+        raise ProblemeAPI(
+            statut=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            titre="Carburant inconnu",
+            detail=f"« {carburant} » n'existe pas. Valeurs acceptees : {', '.join(CARBURANTS)}.",
+            type_=f"{BASE_TYPE}#carburant-inconnu",
+        )
+    _verifier_emprise(lat, lon)
+
+    hypotheses = Hypotheses(
+        facteur_detour=cout.FACTEUR_DETOUR,
+        marge_autonomie=cout.MARGE_AUTONOMIE,
+        litres=litres,
+        consommation_l_100km=conso_l_100km,
+    )
+
+    # Le rayon de recherche est en distance geodesique, alors que l'autonomie se
+    # depense sur la route : on divise par le facteur de detour, sinon on chercherait
+    # trop loin et on ecarterait ensuite la plupart des candidates.
+    rayon = (autonomie_km * cout.MARGE_AUTONOMIE) / cout.FACTEUR_DETOUR
+    lignes = await candidates_meilleure(
+        requete.app.state.pool,
+        RechercheMeilleure(
+            latitude=lat, longitude=lon, carburant=carburant, rayon_geodesique_km=rayon
+        ),
+    )
+
+    evaluees = [_evaluer(ligne, litres=litres, consommation=conso_l_100km) for ligne in lignes]
+    # Double garde-fou : le rayon a deja borne la recherche, mais la regle
+    # d'atteignabilite est testee comme propriete et c'est elle qui fait foi.
+    atteignables = [
+        (e, d) for e, d in evaluees if cout.atteignable(d.distance_km, autonomie_km=autonomie_km)
+    ]
+
+    if not atteignables:
+        corps = ReponseMeilleure(
+            atteignables=0,
+            avertissement=(
+                f"Aucune station atteignable avec {autonomie_km:.0f} km d'autonomie. "
+                "Essayez un autre carburant, ou verifiez votre position."
+            ),
+            hypotheses=hypotheses,
+        )
+        poser_entetes(reponse, corps, max_age=_duree_cache())
+        return corps
+
+    par_cout = sorted(atteignables, key=lambda paire: paire[1].cout_reel_eur)
+    par_distance = min(atteignables, key=lambda paire: paire[1].distance_km)
+
+    corps = ReponseMeilleure(
+        meilleure=par_cout[0][0],
+        la_plus_proche=par_distance[0],
+        economie_eur=round(cout.economie(par_cout[0][1], par_distance[1]), 2),
+        stations=[evaluee for evaluee, _ in par_cout[:limite]],
+        atteignables=len(atteignables),
+        hypotheses=hypotheses,
     )
     poser_entetes(reponse, corps, max_age=_duree_cache())
     return corps

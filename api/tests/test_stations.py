@@ -344,3 +344,136 @@ async def test_meta_porte_l_attribution_d_openstreetmap(
     assert osm[0]["url"].startswith("https://www.openstreetmap.org/copyright")
     # L'ADEME aussi : les facteurs d'emission porteront un chiffre affiche.
     assert any("ADEME" in s["attribution"] for s in corps["sources"])
+
+
+# --------------------------------------------------- /v1/stations/meilleure
+@sans_base
+async def test_la_meilleure_station_n_est_pas_la_moins_chere_au_litre(
+    client: httpx.AsyncClient,
+) -> None:
+    """Le cas qui justifie l endpoint, contre une vraie base.
+
+    Le jeu de donnees a une station proche a prix plus eleve et une plus lointaine
+    moins chere au litre. Le classement se fait sur le cout reel, detour compris.
+    """
+    reponse = await client.get(
+        "/v1/stations/meilleure",
+        params={"lat": PRADO[0], "lon": PRADO[1], "carburant": "gazole", "autonomie_km": 80},
+    )
+    assert reponse.status_code == 200
+    corps = reponse.json()
+
+    assert corps["meilleure"] is not None
+    assert corps["atteignables"] >= 2
+    # Le classement est bien par cout reel croissant.
+    couts = [s["cout_reel_eur"] for s in corps["stations"]]
+    assert couts == sorted(couts)
+    # Et le cout reel depasse toujours le seul prix du plein.
+    for station in corps["stations"]:
+        assert station["cout_reel_eur"] >= station["cout_plein_eur"]
+        assert station["cout_detour_eur"] >= 0
+
+
+@sans_base
+async def test_la_meilleure_station_expose_ses_hypotheses(
+    client: httpx.AsyncClient,
+) -> None:
+    """Un chiffre qu'on ne peut pas refaire soi-meme n'a pas sa place."""
+    corps = (
+        await client.get(
+            "/v1/stations/meilleure",
+            params={"lat": PRADO[0], "lon": PRADO[1], "carburant": "gazole"},
+        )
+    ).json()
+    hypotheses = corps["hypotheses"]
+    assert hypotheses["aller_retour"] is True
+    assert hypotheses["facteur_detour"] == 1.3
+    assert hypotheses["marge_autonomie"] == 0.8
+    assert hypotheses["litres"] == 40.0
+    assert "approximation" in hypotheses["prix_du_trajet"]
+
+
+@sans_base
+async def test_une_autonomie_minuscule_ne_recommande_rien(
+    client: httpx.AsyncClient,
+) -> None:
+    """Cas limite de la spec : aucune station atteignable, et on le dit clairement."""
+    corps = (
+        await client.get(
+            "/v1/stations/meilleure",
+            params={
+                "lat": PRADO[0],
+                "lon": PRADO[1],
+                "carburant": "gazole",
+                "autonomie_km": 0.1,
+            },
+        )
+    ).json()
+    assert corps["meilleure"] is None
+    assert corps["atteignables"] == 0
+    assert corps["avertissement"] is not None
+    assert "atteignable" in corps["avertissement"]
+
+
+@sans_base
+async def test_l_economie_n_est_jamais_negative(client: httpx.AsyncClient) -> None:
+    corps = (
+        await client.get(
+            "/v1/stations/meilleure",
+            params={"lat": PRADO[0], "lon": PRADO[1], "carburant": "gazole"},
+        )
+    ).json()
+    assert corps["economie_eur"] >= 0
+
+
+@sans_base
+async def test_le_prix_perime_est_ecarte_de_la_recommandation(
+    client: httpx.AsyncClient,
+) -> None:
+    """La station 3 est la plus proche du Prado mais son prix a 60 jours."""
+    corps = (
+        await client.get(
+            "/v1/stations/meilleure",
+            params={"lat": PRADO[0], "lon": PRADO[1], "carburant": "gazole"},
+        )
+    ).json()
+    identifiants = [s["id"] for s in corps["stations"]]
+    assert 3 not in identifiants, "un prix perime ne doit pas etre recommande"
+
+
+@sans_base
+async def test_une_autonomie_negative_est_refusee(client: httpx.AsyncClient) -> None:
+    reponse = await client.get(
+        "/v1/stations/meilleure",
+        params={
+            "lat": PRADO[0],
+            "lon": PRADO[1],
+            "carburant": "gazole",
+            "autonomie_km": -10,
+        },
+    )
+    assert reponse.status_code == 422
+
+
+@sans_base
+async def test_un_carburant_inconnu_liste_les_valeurs_acceptees(
+    client: httpx.AsyncClient,
+) -> None:
+    reponse = await client.get(
+        "/v1/stations/meilleure",
+        params={"lat": PRADO[0], "lon": PRADO[1], "carburant": "diesel"},
+    )
+    assert reponse.status_code == 422
+    corps = reponse.json()
+    assert "gazole" in corps["detail"], "l erreur doit lister les valeurs acceptees"
+
+
+@sans_base
+async def test_une_position_hors_de_france_est_refusee(client: httpx.AsyncClient) -> None:
+    """Aucune station d'outre-mer dans le flux : autant le dire franchement."""
+    reponse = await client.get(
+        "/v1/stations/meilleure",
+        params={"lat": -20.88, "lon": 55.45, "carburant": "gazole"},
+    )
+    assert reponse.status_code == 422
+    assert "outre-mer" in reponse.json()["detail"]
