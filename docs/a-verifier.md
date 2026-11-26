@@ -91,3 +91,10 @@ décision ou un accès.
   elles ne sont présentées nulle part comme un fait. Si on veut un jour afficher « le
   plein moyen en France », il faudra une source (SDES, ADEME) ; en attendant, ne pas
   les habiller en statistique.
+- **La surconsommation de l'E85 n'est pas chiffrée.** Elle est réelle et connue — un
+  véhicule parcourt moins de kilomètres avec un litre d'E85 qu'avec un litre
+  d'essence, l'éthanol ayant un pouvoir calorifique plus faible — mais l'annoncer en
+  pourcentage demande une source. Tant qu'elle manque, l'API dit la chose sans
+  chiffre. À sourcer (ADEME, ou constructeurs) avant d'afficher un ratio sur la page
+  « empreinte carbone » du Jalon 5, qui en aura besoin pour comparer à distance égale
+  plutôt qu'à volume égal.

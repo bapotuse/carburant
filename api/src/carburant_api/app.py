@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from carburant_api import erreurs
 from carburant_api.requetes.connexion import creer_pool
-from carburant_api.routes import geocode, meta, sante, stations
+from carburant_api.routes import geocode, meta, sante, stations, tendances
 from carburant_api.version import DESCRIPTION, PREFIXE, TITRE, VERSION
 
 DELAI_AMONT = httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=10.0)
@@ -80,6 +80,7 @@ def creer_app() -> FastAPI:
     app.include_router(meta.routeur, prefix=PREFIXE)
     app.include_router(geocode.routeur, prefix=PREFIXE)
     app.include_router(stations.routeur, prefix=PREFIXE)
+    app.include_router(tendances.routeur, prefix=PREFIXE)
     return app
 
 
