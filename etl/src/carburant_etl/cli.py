@@ -9,6 +9,7 @@ consistera a envelopper ces fonctions, sans les reecrire.
     etl refresh              rafraichit les vues materialisees et snapshot_prix_jour
     etl qualite              rejoue les controles qualite sur la derniere collecte
     etl facteurs             recupere les facteurs d emission de la Base Carbone
+    etl enseignes            rapproche les enseignes d OpenStreetMap
 """
 
 from __future__ import annotations
@@ -65,6 +66,9 @@ def _parseur() -> argparse.ArgumentParser:
     sous.add_parser("qualite", help="rejoue les controles qualite")
     # Pas dans la boucle de quinze minutes : la Base Carbone bouge une fois par an.
     sous.add_parser("facteurs", help="recupere les facteurs d emission de l ADEME")
+    # Pas dans la boucle de quinze minutes non plus : OSM bouge lentement, et
+    # Overpass est un service beneficiaire qu'on n'interroge pas en continu.
+    sous.add_parser("enseignes", help="rapproche les enseignes d OpenStreetMap")
     return parseur
 
 
@@ -277,6 +281,64 @@ def _facteurs() -> int:
     return 0
 
 
+def _enseignes() -> int:
+    """Rapproche les enseignes d OpenStreetMap avec nos stations.
+
+    Volontairement hors de la boucle de collecte : OSM bouge lentement, et Overpass
+    est un service benevole qu'on n'interroge pas toutes les quinze minutes.
+    """
+    from carburant_etl.chargement.enseignes import rapprocher
+    from carburant_etl.chargement.staging import ouvrir
+    from carburant_etl.pipeline import cloturer_execution, demarrer_execution
+    from carburant_etl.sources.osm import recuperer
+
+    config = Config.depuis_environnement()
+    points = recuperer(config.user_agent)
+    connexion = ouvrir(config.database_url)
+    try:
+        execution_id = demarrer_execution(connexion, "enseignes")
+        try:
+            resultat = rapprocher(connexion, points)
+        except Exception as erreur:
+            cloturer_execution(
+                connexion,
+                execution_id,
+                statut="echec",
+                erreur=f"{type(erreur).__name__}: {erreur}",
+            )
+            raise
+        cloturer_execution(
+            connexion,
+            execution_id,
+            statut="succes",
+            lignes_par_etape={
+                "points_osm": resultat.points_osm,
+                "par_reference": resultat.par_reference,
+                "par_distance": resultat.par_distance,
+                "stations_actives": resultat.stations_actives,
+            },
+        )
+        with connexion.cursor() as curseur:
+            curseur.execute(
+                "SELECT source, stations, part_pourcent, score_moyen "
+                "FROM marts.couverture_enseigne ORDER BY stations DESC"
+            )
+            couverture = curseur.fetchall()
+    finally:
+        connexion.close()
+
+    print(
+        f"{resultat.points_osm} points OpenStreetMap : "
+        f"{resultat.par_reference} rapproche(s) par identifiant officiel, "
+        f"{resultat.par_distance} par distance."
+    )
+    for source, stations, part, score in couverture:
+        detail = f", score moyen {score}" if score is not None else ""
+        print(f"  {source:14s} {stations:6d} stations  {part} %{detail}")
+    print(f"couverture : {resultat.couverture_pourcent:.1f} % des stations actives.")
+    return 0
+
+
 def _qualite() -> int:
     """Rejoue les controles qualite sur l'etat courant de la base."""
     from carburant_etl.chargement.staging import ouvrir
@@ -310,6 +372,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _refresh(args.jours if args.jours > 0 else None, args.annee)
     if args.commande == "facteurs":
         return _facteurs()
+    if args.commande == "enseignes":
+        return _enseignes()
     if args.commande == "backfill":
         return _backfill(args.annee)
 

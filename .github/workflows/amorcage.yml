@@ -1,0 +1,135 @@
+name: Amorçage de l'historique
+
+# Charge les archives annuelles sur le VPS, annee par annee, puis calcule les
+# agregats de chaque annee.
+#
+# Pourquoi ici et pas depuis la session de developpement : les donnees doivent
+# atterrir dans la base de production, et la session n'a pas d'acces ssh au VPS
+# (voir docs/specs/infra.md). C'est le meme chemin que le deploiement.
+#
+# Declenchement manuel seulement. L'operation est **idempotente** : la relancer sur
+# une annee deja chargee n'ajoute aucune ligne. Une coupure se reprend en relancant
+# a partir de l'annee interrompue.
+#
+# Duree attendue : environ 50 minutes de chargement plus 11 minutes d'agregats pour
+# les seize annees, et ~7,7 Go en base (mesures du 26/11/2026).
+
+on:
+  workflow_dispatch:
+    inputs:
+      annee_debut:
+        description: "Première année à charger"
+        default: "2007"
+        required: true
+      annee_fin:
+        description: "Dernière année à charger"
+        default: "2026"
+        required: true
+      agregats:
+        description: "Calculer aussi les agrégats de chaque année"
+        type: boolean
+        default: true
+
+concurrency:
+  # Deux amorcages en parallele sur la meme base, c'est de la contention inutile :
+  # chacun verrait les lignes de l'autre et n'inseererait rien.
+  group: amorcage
+  cancel-in-progress: false
+
+jobs:
+  amorcer:
+    name: Charger ${{ inputs.annee_debut }} à ${{ inputs.annee_fin }}
+    runs-on: ubuntu-latest
+    # Large : seize annees a charger, et une seule coupure ferait tout reprendre.
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Preparer la cle ssh
+        # Meme preparation que le deploiement : `accept-new` plutot que
+        # `ssh-keyscan`, qui fait bannir le runner par fail2ban, et une connexion
+        # unique partagee par toutes les commandes.
+        env:
+          CLE: ${{ secrets.VPS_CLE_PRIVEE }}
+          HOTE: ${{ secrets.VPS_HOST }}
+        run: |
+          set -eu
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$CLE" > ~/.ssh/deploiement
+          chmod 600 ~/.ssh/deploiement
+          {
+            echo 'Host vps-carburant'
+            echo "  HostName $HOTE"
+            echo "  User ${{ secrets.VPS_USER }}"
+            echo '  IdentityFile ~/.ssh/deploiement'
+            echo '  IdentitiesOnly yes'
+            echo '  StrictHostKeyChecking accept-new'
+            echo '  ConnectTimeout 15'
+            echo '  ServerAliveInterval 30'
+            echo '  ServerAliveCountMax 10'
+            echo '  ControlMaster auto'
+            echo '  ControlPath ~/.ssh/cm-%r@%h:%p'
+            echo '  ControlPersist 30m'
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Y a-t-il la place ?
+        # 7,7 Go pour l'historique complet, mesures. Mieux vaut refuser de commencer
+        # que remplir le disque d'un VPS en production a moitie du chargement.
+        run: |
+          set -eu
+          libre=$(ssh vps-carburant "df -BG --output=avail /opt | tail -1 | tr -dc '0-9'")
+          echo "Disque libre sur le VPS : ${libre} Go"
+          if [ "$libre" -lt 12 ]; then
+            echo "::error::Moins de 12 Go libres : l historique complet en demande environ 7,7."
+            exit 1
+          fi
+
+      - name: Charger les années
+        run: |
+          set -eu
+          debut='${{ inputs.annee_debut }}'
+          fin='${{ inputs.annee_fin }}'
+          agregats='${{ inputs.agregats }}'
+          for annee in $(seq "$debut" "$fin"); do
+            echo "::group::Année $annee"
+            ssh vps-carburant \
+              "cd /opt/carburant && sudo docker compose -f compose.prod.yaml \
+                 run --rm --no-deps etl etl backfill --annee $annee"
+            if [ "$agregats" = "true" ]; then
+              ssh vps-carburant \
+                "cd /opt/carburant && sudo docker compose -f compose.prod.yaml \
+                   run --rm --no-deps etl etl refresh --annee $annee"
+            fi
+            echo "::endgroup::"
+          done
+
+      - name: Ce que ça a donné
+        if: always()
+        run: |
+          set -eu
+          ssh vps-carburant "cd /opt/carburant && sudo docker compose -f compose.prod.yaml \
+            exec -T db psql -U carburant -c \"
+              SELECT count(*) AS prix,
+                     min(maj)::date AS depuis,
+                     max(maj)::date AS jusqu_a
+                FROM marts.fact_prix;
+              SELECT count(*) AS agregats, count(DISTINCT jour) AS jours
+                FROM marts.agregat_prix_jour;
+              SELECT count(*) AS partitions FROM pg_inherits
+               WHERE inhparent = 'marts.fact_prix'::regclass;
+              SELECT count(*) AS lignes_en_partition_defaut FROM marts.fact_prix_defaut;
+              SELECT pg_size_pretty(pg_database_size('carburant')) AS taille;
+            \""
+
+      - name: Contrôles qualité
+        if: always()
+        run: |
+          ssh vps-carburant "cd /opt/carburant && sudo docker compose -f compose.prod.yaml \
+            run --rm --no-deps etl etl qualite"
+
+      - name: Effacer la clé
+        if: always()
+        run: |
+          ssh -O exit vps-carburant 2>/dev/null || true
+          rm -f ~/.ssh/deploiement ~/.ssh/config ~/.ssh/cm-*

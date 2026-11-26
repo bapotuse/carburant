@@ -1,0 +1,56 @@
+name: Enseignes OpenStreetMap
+
+# Rapproche les enseignes d'OpenStreetMap avec les stations, sur le VPS.
+#
+# Declenchement manuel, et volontairement pas a chaque deploiement : la requete
+# Overpass rend 7,7 Mo et met une centaine de secondes, pour un service benevole.
+# OSM bouge lentement ; une fois par mois suffit largement.
+#
+# L'operation est idempotente et sait retirer : une enseigne disparue d'OSM
+# disparait de chez nous au passage suivant.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: enseignes
+  cancel-in-progress: false
+
+jobs:
+  rapprocher:
+    name: Rapprocher les enseignes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Preparer la cle ssh
+        env:
+          CLE: ${{ secrets.VPS_CLE_PRIVEE }}
+          HOTE: ${{ secrets.VPS_HOST }}
+        run: |
+          set -eu
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$CLE" > ~/.ssh/deploiement
+          chmod 600 ~/.ssh/deploiement
+          {
+            echo 'Host vps-carburant'
+            echo "  HostName $HOTE"
+            echo "  User ${{ secrets.VPS_USER }}"
+            echo '  IdentityFile ~/.ssh/deploiement'
+            echo '  IdentitiesOnly yes'
+            echo '  StrictHostKeyChecking accept-new'
+            echo '  ConnectTimeout 15'
+            echo '  ServerAliveInterval 30'
+            echo '  ServerAliveCountMax 10'
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Rapprocher
+        run: |
+          ssh vps-carburant "cd /opt/carburant && sudo docker compose -f compose.prod.yaml \
+            run --rm --no-deps etl etl enseignes"
+
+      - name: Effacer la cle
+        if: always()
+        run: rm -f ~/.ssh/deploiement ~/.ssh/config
