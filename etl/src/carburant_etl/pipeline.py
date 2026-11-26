@@ -24,6 +24,7 @@ from psycopg.types.json import Jsonb
 
 from carburant_etl.chargement import agregats, marts
 from carburant_etl.chargement.staging import charger, ouvrir, purger_staging
+from carburant_etl.chargement.verrou import exclusif
 from carburant_etl.config import Config
 from carburant_etl.modeles import Aplatissement, aplatir
 from carburant_etl.qualite import controles
@@ -188,111 +189,124 @@ def executer(config: Config, *, rejouer: Path | None = None) -> Resultat:
     """
     connexion = ouvrir(config.database_url)
     try:
-        execution_id = demarrer_execution(connexion, "run")
-        try:
-            collecte = collecte_depuis_fichier(rejouer) if rejouer is not None else extraire(config)
+        # Le verrou avant tout le reste : inutile d'ouvrir une execution dans le
+        # journal si on va renoncer. Une collecte lancee pendant un amorcage d'une
+        # heure renonce et laisse la suivante passer.
+        with exclusif(connexion, operation="collecte"):
+            return _executer_sous_verrou(connexion, config, rejouer)
+    finally:
+        connexion.close()
 
-            if collecte.inchange:
-                # Rien de neuf : inutile de recharger 55 000 lignes identiques.
-                cloturer_execution(
-                    connexion,
-                    execution_id,
-                    statut="succes",
-                    lignes_par_etape={"extract": 0, "transform": 0, "load": 0},
-                    avertissements=[{"motif": "contenu inchange depuis la derniere collecte"}],
-                )
-                return Resultat(
-                    execution_id=execution_id,
-                    collecte_id=None,
-                    stations=0,
-                    prix=0,
-                    rejets=0,
-                    inchange=True,
-                    fichiers_purges=0,
-                    collectes_purgees=0,
-                )
 
-            aplati = transformer(collecte)
-            collecte_id = charger(connexion, collecte, aplati, execution_id=execution_id)
-            resultat_marts = marts.charger(connexion, collecte_id)
+def _executer_sous_verrou(
+    connexion: psycopg.Connection[tuple[object, ...]],
+    config: Config,
+    rejouer: Path | None,
+) -> Resultat:
+    """Le corps de `executer`, une fois le verrou obtenu."""
+    execution_id = demarrer_execution(connexion, "run")
+    try:
+        collecte = collecte_depuis_fichier(rejouer) if rejouer is not None else extraire(config)
 
-            # La reference departementale et les agregats du jour, avant les
-            # controles : le controle des prix atypiques lit la reference, et une
-            # reference d'il y a quinze minutes jugerait les prix d'il y a quinze
-            # minutes.
-            # Deux jours et non un : une collecte a 00 h 02 voit des changements de
-            # la veille, et l'agregat de la veille serait fige sur son avant-dernier
-            # etat. Releve par l'audit du 26/11/2026.
-            refresh = agregats.rafraichir(connexion, jours=2)
-
-            # Les controles tournent **apres** le chargement, et ne l'annulent pas.
-            # Une collecte ou le nombre de stations a bouge de 11 % reste une
-            # collecte a conserver : c'est l'execution qu'on marque en echec, pas la
-            # donnee qu'on jette.
-            verdicts = controles.executer(connexion)
-
-            fichiers = purger(config.repertoire_brut, retention_jours=config.retention_jours)
-            collectes = purger_staging(connexion)
-
-            echecs = controles.echecs_bloquants(verdicts)
-            avertissements: list[dict[str, Any]] = [
-                {"champ": champ, "motif": motif, "occurrences": nombre, "exemple": exemple}
-                for champ, motif, nombre, exemple in aplati.rejets.lignes()
-            ]
-            # **Tous** les verdicts, pas seulement les echecs. Le critere de sortie
-            # du Jalon 2 demande « le rapport qualite de la derniere execution » :
-            # sans les verts, on lit seulement qu'aucun controle n'a echoue, sans
-            # savoir lesquels ont tourne. Releve par l'audit du 26/11/2026.
-            avertissements += [v.en_dictionnaire() for v in verdicts]
-
+        if collecte.inchange:
+            # Rien de neuf : inutile de recharger 55 000 lignes identiques.
             cloturer_execution(
                 connexion,
                 execution_id,
-                statut="echec" if echecs else "succes",
-                lignes_par_etape={
-                    "extract": aplati.lignes_lues,
-                    "transform": len(aplati.prix),
-                    "load_staging": len(aplati.prix),
-                    "stations_inserees": resultat_marts.stations_inserees,
-                    "stations_mises_a_jour": resultat_marts.stations_mises_a_jour,
-                    "stations_desactivees": resultat_marts.stations_desactivees,
-                    "stations_actives": compter_stations_actives(connexion),
-                    "prix_nouveaux": resultat_marts.prix_inseres,
-                    "prix_revus": resultat_marts.prix_revus,
-                    "ruptures": resultat_marts.ruptures,
-                    "rejets": aplati.rejets.total,
-                    "agregats": refresh.lignes_agregat,
-                },
-                avertissements=avertissements,
-                erreur=(
-                    "controles qualite en echec : "
-                    + ", ".join(f"{v.nom} ({v.mesure})" for v in echecs)
-                )
-                if echecs
-                else None,
+                statut="succes",
+                lignes_par_etape={"extract": 0, "transform": 0, "load": 0},
+                avertissements=[{"motif": "contenu inchange depuis la derniere collecte"}],
             )
-            if echecs:
-                raise EchecQualite(echecs)
             return Resultat(
                 execution_id=execution_id,
-                collecte_id=collecte_id,
-                stations=len(aplati.stations),
-                prix=len(aplati.prix),
-                rejets=aplati.rejets.total,
-                inchange=False,
-                fichiers_purges=fichiers,
-                collectes_purgees=collectes,
-                marts=resultat_marts,
-                qualite=verdicts,
+                collecte_id=None,
+                stations=0,
+                prix=0,
+                rejets=0,
+                inchange=True,
+                fichiers_purges=0,
+                collectes_purgees=0,
             )
-        except EchecQualite:
-            # L'execution est deja close, avec son statut et le detail des echecs :
-            # la reclore en « echec » effacerait les lignes par etape.
-            raise
-        except Exception as erreur:
-            cloturer_execution(
-                connexion, execution_id, statut="echec", erreur=f"{type(erreur).__name__}: {erreur}"
+
+        aplati = transformer(collecte)
+        collecte_id = charger(connexion, collecte, aplati, execution_id=execution_id)
+        resultat_marts = marts.charger(connexion, collecte_id)
+
+        # La reference departementale et les agregats du jour, avant les
+        # controles : le controle des prix atypiques lit la reference, et une
+        # reference d'il y a quinze minutes jugerait les prix d'il y a quinze
+        # minutes.
+        # Deux jours et non un : une collecte a 00 h 02 voit des changements de
+        # la veille, et l'agregat de la veille serait fige sur son avant-dernier
+        # etat. Releve par l'audit du 26/11/2026.
+        refresh = agregats.rafraichir(connexion, jours=2)
+
+        # Les controles tournent **apres** le chargement, et ne l'annulent pas.
+        # Une collecte ou le nombre de stations a bouge de 11 % reste une
+        # collecte a conserver : c'est l'execution qu'on marque en echec, pas la
+        # donnee qu'on jette.
+        verdicts = controles.executer(connexion)
+
+        fichiers = purger(config.repertoire_brut, retention_jours=config.retention_jours)
+        collectes = purger_staging(connexion)
+
+        echecs = controles.echecs_bloquants(verdicts)
+        avertissements: list[dict[str, Any]] = [
+            {"champ": champ, "motif": motif, "occurrences": nombre, "exemple": exemple}
+            for champ, motif, nombre, exemple in aplati.rejets.lignes()
+        ]
+        # **Tous** les verdicts, pas seulement les echecs. Le critere de sortie
+        # du Jalon 2 demande « le rapport qualite de la derniere execution » :
+        # sans les verts, on lit seulement qu'aucun controle n'a echoue, sans
+        # savoir lesquels ont tourne. Releve par l'audit du 26/11/2026.
+        avertissements += [v.en_dictionnaire() for v in verdicts]
+
+        cloturer_execution(
+            connexion,
+            execution_id,
+            statut="echec" if echecs else "succes",
+            lignes_par_etape={
+                "extract": aplati.lignes_lues,
+                "transform": len(aplati.prix),
+                "load_staging": len(aplati.prix),
+                "stations_inserees": resultat_marts.stations_inserees,
+                "stations_mises_a_jour": resultat_marts.stations_mises_a_jour,
+                "stations_desactivees": resultat_marts.stations_desactivees,
+                "stations_actives": compter_stations_actives(connexion),
+                "prix_nouveaux": resultat_marts.prix_inseres,
+                "prix_revus": resultat_marts.prix_revus,
+                "ruptures": resultat_marts.ruptures,
+                "rejets": aplati.rejets.total,
+                "agregats": refresh.lignes_agregat,
+            },
+            avertissements=avertissements,
+            erreur=(
+                "controles qualite en echec : " + ", ".join(f"{v.nom} ({v.mesure})" for v in echecs)
             )
-            raise
-    finally:
-        connexion.close()
+            if echecs
+            else None,
+        )
+        if echecs:
+            raise EchecQualite(echecs)
+        return Resultat(
+            execution_id=execution_id,
+            collecte_id=collecte_id,
+            stations=len(aplati.stations),
+            prix=len(aplati.prix),
+            rejets=aplati.rejets.total,
+            inchange=False,
+            fichiers_purges=fichiers,
+            collectes_purgees=collectes,
+            marts=resultat_marts,
+            qualite=verdicts,
+        )
+    except EchecQualite:
+        # L'execution est deja close, avec son statut et le detail des echecs :
+        # la reclore en « echec » effacerait les lignes par etape.
+        raise
+    except Exception as erreur:
+        cloturer_execution(
+            connexion, execution_id, statut="echec", erreur=f"{type(erreur).__name__}: {erreur}"
+        )
+        raise
+    raise AssertionError("inatteignable")

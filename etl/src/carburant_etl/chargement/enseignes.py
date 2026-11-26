@@ -30,6 +30,7 @@ from typing import Final
 
 import psycopg
 
+from carburant_etl.chargement.verrou import exclusif
 from carburant_etl.sources.osm import PointOsm
 
 journal = logging.getLogger("carburant.enseignes")
@@ -134,7 +135,11 @@ def rapprocher(
         raise ValueError("aucun point OpenStreetMap a rapprocher")
     vue = dt.datetime.now(tz=dt.UTC)
 
-    with connexion.transaction(), connexion.cursor() as curseur:
+    with (
+        exclusif(connexion, operation="enseignes"),
+        connexion.transaction(),
+        connexion.cursor() as curseur,
+    ):
         curseur.execute(_TABLE)
         with curseur.copy(
             "COPY osm (cle, reference, enseigne, wikidata, geom) FROM STDIN"

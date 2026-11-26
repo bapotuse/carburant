@@ -32,6 +32,7 @@ from dataclasses import dataclass
 
 import psycopg
 
+from carburant_etl.chargement.verrou import exclusif
 from carburant_etl.fuseau import PARIS
 
 journal = logging.getLogger("carburant.agregats")
@@ -253,6 +254,9 @@ def rafraichir(
     """
     rafraichir_reference(connexion)
     a_calculer = jours_a_calculer(connexion, limite=jours)
+    # Pas de verrou ici : `rafraichir` est appelee depuis le pipeline, qui le detient
+    # deja. Les verrous consultatifs se reentrent dans une meme session, mais prendre
+    # un verrou qu'on detient deja n'apporte rien et brouille la lecture.
     lignes = calculer_agregats(connexion, a_calculer)
     journal.info("agregats : %d jour(s), %d ligne(s)", len(a_calculer), lignes)
     return ResultatRefresh(jours=len(a_calculer), lignes_agregat=lignes, reference_rafraichie=True)
@@ -408,7 +412,11 @@ def calculer_periode(
     """
     if fin < debut:
         raise ValueError(f"periode a l envers : {debut} -> {fin}")
-    with connexion.transaction(), connexion.cursor() as curseur:
+    with (
+        exclusif(connexion, operation=f"agregats {debut} -> {fin}"),
+        connexion.transaction(),
+        connexion.cursor() as curseur,
+    ):
         curseur.execute(
             _AGREGER_EN_MASSE,
             {"debut": debut, "fin": fin, "fenetre": FENETRE_PEREMPTION_JOURS},

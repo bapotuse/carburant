@@ -37,6 +37,7 @@ from typing import Final
 import psycopg
 
 from carburant_etl.chargement.marts import assurer_partitions
+from carburant_etl.chargement.verrou import exclusif
 from carburant_etl.sources.archives import PrixArchive, StationArchive, lire, telecharger
 
 journal = logging.getLogger("carburant.backfill")
@@ -239,7 +240,30 @@ def amorcer(
     user_agent: str,
     taille_lot: int = TAILLE_LOT,
 ) -> ResultatBackfill:
-    """Charge une annee d'archive. Idempotent : la rejouer n'ajoute rien."""
+    """Charge une annee d'archive. Idempotent : la rejouer n'ajoute rien.
+
+    Prend le verrou d'exclusion : un amorcage dure une heure, et la collecte se
+    declenche toutes les quinze minutes.
+    """
+    with exclusif(connexion, operation=f"amorcage {annee}"):
+        return _amorcer(
+            connexion,
+            annee,
+            repertoire=repertoire,
+            user_agent=user_agent,
+            taille_lot=taille_lot,
+        )
+
+
+def _amorcer(
+    connexion: psycopg.Connection[tuple[object, ...]],
+    annee: int,
+    *,
+    repertoire: Path,
+    user_agent: str,
+    taille_lot: int,
+) -> ResultatBackfill:
+    """Le corps de `amorcer`, une fois le verrou obtenu."""
     debut = dt.datetime.now(tz=dt.UTC)
     chemin = telecharger(annee, repertoire, user_agent=user_agent)
     collecte_id = enregistrer_collecte_archive(connexion, annee, chemin)
