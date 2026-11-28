@@ -21,8 +21,11 @@ Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seui
 
 - **J2** : l'historique complet est en base sur le VPS, **64 062 124 changements de
   prix** du 01/01/2007 au 26/11/2026, **242 partitions**, partition DEFAULT a
-  **0 ligne**, **3 836 872 lignes d'agregat** sur **7 299 jours**, base a **8 477 Mo**,
-  neuf controles qualite au vert. 3 h 20 de bout en bout.
+  **0 ligne**, **3 836 872 lignes d'agregat** sur **7 299 jours**, base a **8 477 Mo**.
+  3 h 20 de bout en bout. Les **huit** controles qualite d'alors etaient au vert en
+  production ; le neuvieme, `aucun_agregat_futur`, a ete ajoute le 28/11 et n'a
+  tourne que **sur la base locale** -- a verifier en production a la prochaine
+  execution de `etl qualite`.
 - **J3** : onze routes, contrat audite (34 schemas, aucun manque), p95 de
   `/v1/stations/proches` a **33,5 ms** sur le VPS pour un budget de 300 ms.
 - **J4** : six outils MCP, les deux transports, connecteur distant en ligne sur
