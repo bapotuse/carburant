@@ -1,18 +1,24 @@
 # Avancement
 
 ## Prochaine action
-**Le Jalon 5, le site complet.** Il commence par une validation de gout : les maquettes
-mobiles de l'accueil et de la carte. Avant d'ecrire du Vue, relire `docs/specs/web.md`
-et `docs/anti-patterns-ia.md`, puis produire les maquettes et les soumettre.
+**Le Jalon 5 continue.** La fiche station est faite et verifiee ; la suite est la
+**carte** (MapLibre, bottom sheet glissable, jauge d'autonomie), puis les maquettes
+mobiles de l'accueil et de la carte a soumettre a Baptiste -- c'est la validation de
+gout du jalon.
 
-Premiere tache technique du jalon, independante du gout : la page **fiche station**, qui
-a deja son endpoint (`/v1/stations/{id}`) et son historique. Puis la carte.
+Avant d'ecrire du Vue : relire `docs/specs/web.md` et `docs/anti-patterns-ia.md`.
 
-Deux choses a reprendre quand le site affichera les anecdotes : `/v1/anecdotes/du-jour`
-met **1,1 s**, parce que l'effet du jour de la semaine se recalcule sur 7 299 jours a
-chaque appel. Si l'accueil l'affiche cote serveur, il faut une table calculee par l'ETL.
-Et le lien vers la fiche d'une station doit entrer dans les reponses MCP : il en est
-absent parce que la page n'existait pas.
+Trois choses notees en chemin, a reprendre au bon moment :
+
+- `/v1/anecdotes/du-jour` met **1,1 s** : l'effet du jour de la semaine se recalcule
+  sur 7 299 jours a chaque appel. Si l'accueil l'affiche cote serveur, il faut une
+  table calculee par l'ETL.
+- Le lien vers la fiche d'une station doit entrer dans les reponses MCP : il en etait
+  absent parce que la page n'existait pas. Elle existe.
+- **Les trois tests de l'accueil qui saisissent une adresse echouent dans cet
+  environnement** : le conteneur de l'API ne peut pas joindre le geocodeur de l'IGN,
+  le proxy sortant n'ecoutant que sur la boucle locale de l'hote. Ils tournent contre
+  la production a chaque deploiement. Ne pas les desactiver pour faire vert.
 
 Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seuils, et
 `docs/decisions.md` avant de refaire un choix deja tranche.
@@ -248,8 +254,11 @@ obtient bien une **demande de précision** — cinq candidats, dont l'avenue du 
 `uvx` fonctionne depuis le dépôt git ; depuis PyPI, il faut le compte de Baptiste.
 
 ### J5 — Site complet
-- [ ] [VALIDATION] Maquettes mobiles de l'accueil et de la carte (captures)
-- [ ] Pages : carte avec bottom sheet, fiche station, tendances, empreinte carbone, comprendre le prix, à propos, 404, erreur, hors ligne
+- [ ] 🎨 **[VALIDATION]** Maquettes mobiles de l'accueil et de la carte (captures)
+- [ ] Pages : carte avec bottom sheet, ~~fiche station~~, tendances, empreinte carbone, comprendre le prix, à propos, 404, erreur, hors ligne
+  - [x] **Fiche station** — 28/11/2026, `/station/{id}` : prix par carburant en totem
+        avec leur date, historique en courbe SVG sans librairie, services, horaires,
+        trois liens d'itinéraire. Captures dans `docs/captures/J5/`.
 - [ ] Détails « univers carburant » retenus
 - [ ] [VALIDATION] Objets 3D (descriptions ou croquis, puis prototype de l'objet retenu)
 - [ ] 3D avec replis statiques
