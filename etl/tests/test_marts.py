@@ -399,3 +399,52 @@ def test_dim_carburant_correspond_a_la_table_du_code(base: str) -> None:
         for c in CARBURANTS
     ]
     assert [(a, b, c, d, e, nombre(f), nombre(g)) for a, b, c, d, e, f, g in en_base] == attendu
+
+
+@pytest.mark.integration
+def test_prix_courant_elague_les_partitions(base: str) -> None:
+    """La vue ne doit pas traverser vingt ans d'historique.
+
+    Mesure du 28/11/2026 sur le VPS, avant correction : `/v1/anecdotes/du-jour`
+    repondait en 28,7 secondes et les controles qualite mettaient huit minutes et
+    demie, parce que cette vue faisait un `DISTINCT ON` par station sur les
+    242 partitions de `marts.fact_prix`.
+
+    Le test cree une partition entierement anterieure a l'horizon et exige qu'elle
+    soit absente du plan. Mesurer un temps ne prouverait rien sur une base de test.
+    """
+    with psycopg.connect(base, autocommit=True) as connexion:
+        connexion.execute(
+            "CREATE TABLE IF NOT EXISTS marts.fact_prix_202301 PARTITION OF marts.fact_prix "
+            "FOR VALUES FROM ('2023-01-01T00:00:00+00') TO ('2023-02-01T00:00:00+00')"
+        )
+        plan = "\n".join(
+            str(ligne[0])
+            for ligne in connexion.execute(
+                "EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) "
+                "SELECT count(*) FROM marts.prix_courant"
+            ).fetchall()
+        )
+    assert "fact_prix_202301" not in plan, (
+        "marts.prix_courant lit une partition de janvier 2023, anterieure a l'horizon : "
+        f"l'elagage ne fonctionne pas.\nPlan obtenu :\n{plan}"
+    )
+
+
+@pytest.mark.integration
+def test_l_horizon_et_la_peremption_partagent_leur_seuil(base: str) -> None:
+    """Changer l'un sans l'autre doit faire echouer un test, pas passer inapercu."""
+    with psycopg.connect(base, autocommit=True) as connexion:
+        ligne = connexion.execute(
+            "SELECT marts.jours_avant_peremption(), "
+            "       marts.classe_fraicheur(marts.horizon_prix_exploitable()), "
+            "       marts.classe_fraicheur(marts.horizon_prix_exploitable() + interval '1 day')"
+        ).fetchone()
+    assert ligne is not None
+    seuil, a_l_horizon, un_jour_apres = ligne
+    assert seuil == 30, "le seuil de peremption mesure est de trente jours"
+    assert a_l_horizon == "perime", (
+        "a l'horizon exact, un prix doit deja etre perime : sinon l'horizon ecarte "
+        "des prix que les recherches auraient gardes"
+    )
+    assert un_jour_apres != "perime", "un jour apres l'horizon, le prix reste exploitable"
