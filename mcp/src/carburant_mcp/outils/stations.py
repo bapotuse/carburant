@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from carburant_mcp.carburants import libelle, normaliser
 from carburant_mcp.client import ClientCarburant
 from carburant_mcp.erreurs import relayer
-from carburant_mcp.formats import euros
+from carburant_mcp.formats import euros, pluriel
 from carburant_mcp.lieux import geocoder
 from carburant_mcp.presentation import StationLisible, decrire, lire_station, nommer
 
@@ -118,8 +118,7 @@ def _texte_stations(reponse: ReponseStations) -> str:
     lignes = [decrire(station) for station in reponse.stations]
     entete = (
         f"{reponse.carburant_libelle.capitalize()} autour de {reponse.lieu} — "
-        f"{reponse.total_dans_le_rayon} station"
-        f"{'s' if reponse.total_dans_le_rayon > 1 else ''} dans "
+        f"{pluriel(reponse.total_dans_le_rayon, 'station')} dans "
         f"{reponse.rayon_km:g} km, les moins cheres :"
     )
     return entete + "\n" + "\n".join(f"- {ligne}" for ligne in lignes)

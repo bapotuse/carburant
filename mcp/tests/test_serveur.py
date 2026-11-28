@@ -74,11 +74,24 @@ def test_le_dossier_mcp_ne_masque_pas_le_sdk() -> None:
     """
     import mcp
 
-    fichier = mcp.__file__ or ""
-    assert "site-packages" in fichier, f"« import mcp » atteint {fichier}"
-    assert "carburant" not in fichier
+    fichier = mcp.__file__
+    # `__file__` vaut **None** pour un paquet-espace de noms : c'est precisement ce
+    # qu'etait `mcp` quand le dossier du projet le masquait. L'ancienne version de ce
+    # test comparait une chaine vide a « carburant » et passait donc tranquillement
+    # **grace** au defaut qu'elle pretendait surveiller.
+    assert fichier is not None, (
+        "« import mcp » ne resout pas vers un vrai paquet : le dossier mcp/ du depot "
+        "le masque sous forme de paquet-espace de noms"
+    )
 
     racine = Path(__file__).resolve().parent
+    depot = racine.parent.parent
+    # L'assertion decisive, et elle ne depend pas du chemin de la copie de travail :
+    # en CI le depot s'appelle lui-meme « carburant », ce qui faisait echouer une
+    # verification par sous-chaine.
+    assert not Path(fichier).resolve().is_relative_to(depot / "mcp"), (
+        f"« import mcp » atteint {fichier}, qui est dans le dossier du projet"
+    )
     assert (racine / "__init__.py").exists(), (
         "mcp/tests/__init__.py est ce qui empeche pytest de traiter mcp/ comme une "
         "racine de paquet ; sans lui le SDK est masque"

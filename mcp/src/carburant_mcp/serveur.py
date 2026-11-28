@@ -32,6 +32,7 @@ from collections.abc import Sequence
 from typing import Any, Final
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 
 from carburant_mcp.client import API_PAR_DEFAUT, ClientCarburant, base_api
 from carburant_mcp.outils import analyses, stations
@@ -40,6 +41,46 @@ journal = logging.getLogger("carburant.mcp")
 
 NOM: Final = "carburant"
 VERSION: Final = "0.1.0"
+
+HOTE_PAR_DEFAUT: Final = "127.0.0.1"
+"""On n'ecoute pas sur toutes les interfaces sans le demander.
+
+Le conteneur, lui, passe `--hote 0.0.0.0` : il n'est joignable que par Caddy sur le
+reseau Docker et ne publie aucun port.
+"""
+
+PORT_PAR_DEFAUT: Final = 8001
+"""Le port que `infra/docker/mcp.Dockerfile` expose et que Caddy appelle."""
+
+DOMAINE_PRODUCTION: Final = "carburant.144-24-195-97.sslip.io"
+
+
+def hotes_autorises() -> list[str]:
+    """Les valeurs d'en-tete `Host` que le transport HTTP accepte.
+
+    **Sans cette liste, le serveur refuse tout.** Le SDK active la protection contre
+    le reliage DNS par defaut et compare l'en-tete `Host` a une liste **vide** : tout
+    est rejete, avec un simple avertissement dans les journaux. Decouvert en lisant
+    `mcp.server.transport_security`, pas en deployant un serveur muet.
+
+    La protection elle-meme est utile et on la garde : elle empeche qu'une page web
+    fasse parler le serveur MCP local d'un visiteur en pointant un nom de domaine sur
+    `127.0.0.1`.
+
+    Caddy transmet l'en-tete `Host` d'origine, donc c'est le domaine public qu'on
+    autorise, plus la boucle locale pour un essai en developpement. Surchargeable par
+    `CARBURANT_MCP_HOTES`, pour un autre domaine sans reconstruire l'image.
+    """
+    brut = os.environ.get("CARBURANT_MCP_HOTES")
+    if brut:
+        return [hote.strip() for hote in brut.split(",") if hote.strip()]
+    return [
+        DOMAINE_PRODUCTION,
+        f"{DOMAINE_PRODUCTION}:*",
+        "localhost:*",
+        "127.0.0.1:*",
+    ]
+
 
 INSTRUCTIONS: Final = """\
 Prix des carburants dans les quelque 9 800 stations-service de France metropolitaine
@@ -99,7 +140,18 @@ async def _servir(transport: str, hote: str, port: int) -> None:
             # Sans etat : le VPS n'a pas de memoire partagee entre requetes, et une
             # session qui vivrait dans un seul processus casserait au redemarrage.
             await serveur.run_streamable_http_async(
-                host=hote, port=port, streamable_http_path="/mcp", stateless_http=True
+                host=hote,
+                port=port,
+                streamable_http_path="/mcp",
+                stateless_http=True,
+                transport_security=TransportSecuritySettings(
+                    allowed_hosts=hotes_autorises(),
+                    # Pas d'origine autorisee : un client MCP n'est pas un navigateur
+                    # et n'envoie pas d'`Origin`. Le SDK laisse passer les requetes
+                    # sans cet en-tete ; en declarer une n'ajouterait rien et
+                    # ouvrirait la porte a une page web.
+                    allowed_origins=[],
+                ),
             )
 
 
@@ -115,8 +167,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="stdio",
         help="stdio pour un client local, http pour le connecteur distant",
     )
-    parseur.add_argument("--hote", default="127.0.0.1", help="adresse d'ecoute du transport http")
-    parseur.add_argument("--port", type=int, default=8080, help="port d'ecoute du transport http")
+    parseur.add_argument(
+        "--hote", default=HOTE_PAR_DEFAUT, help="adresse d'ecoute du transport http"
+    )
+    parseur.add_argument(
+        "--port", type=int, default=PORT_PAR_DEFAUT, help="port d'ecoute du transport http"
+    )
     parseur.add_argument(
         "--verifier",
         action="store_true",
@@ -152,7 +208,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["API_PAR_DEFAUT", "INSTRUCTIONS", "base_api", "creer_serveur", "main"]
+__all__ = [
+    "API_PAR_DEFAUT",
+    "INSTRUCTIONS",
+    "base_api",
+    "creer_serveur",
+    "hotes_autorises",
+    "main",
+]
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from carburant_mcp.formats import (
     euros,
     litres,
     nombre,
+    pluriel,
     prix_litre,
 )
 
@@ -145,3 +146,20 @@ def test_aucun_format_n_utilise_l_espace_ordinaire_avant_l_unite() -> None:
     for rendu in (prix_litre(1.879), euros(10.0), litres(50), distance_km(2.4), co2_kg(155.0)):
         assert " " not in rendu, rendu
         assert INSECABLE_ETROITE in rendu
+
+
+@pytest.mark.parametrize(
+    ("nombre_d_elements", "attendu"),
+    [(0, "0 jour"), (1, "1 jour"), (2, "2 jours"), (30, "30 jours")],
+)
+def test_le_pluriel_suit_la_regle_francaise(nombre_d_elements: int, attendu: str) -> None:
+    """Le francais met au singulier zero et un, contrairement a l'anglais.
+
+    L'oublier produit « sur 1 jours », ce qu'aucun francophone n'ecrit -- et c'est
+    exactement ce que le serveur repondait avant ce correctif.
+    """
+    assert pluriel(nombre_d_elements, "jour").replace(INSECABLE_ETROITE, " ") == attendu
+
+
+def test_le_pluriel_accepte_une_forme_irreguliere() -> None:
+    assert pluriel(3, "cheval", "chevaux").replace(INSECABLE_ETROITE, " ") == "3 chevaux"

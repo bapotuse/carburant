@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from carburant_mcp.carburants import CODES, libelle, normaliser
 from carburant_mcp.client import ClientCarburant, ErreurAPI
 from carburant_mcp.erreurs import relayer
-from carburant_mcp.formats import co2_kg, nombre, prix_litre
+from carburant_mcp.formats import co2_kg, nombre, pluriel, prix_litre
 from carburant_mcp.formats import litres as litres_affiches
 from carburant_mcp.lieux import geocoder
 
@@ -218,15 +218,16 @@ def enregistrer(serveur: MCPServer[Any], client: ClientCarburant) -> None:
         else:
             mouvement = f"en {sens} de {nombre(centimes, 1)} centimes par litre"
         texte = (
-            f"{libelle(code).capitalize()} en {nom_zone}, sur {len(points)} jours : "
+            f"{libelle(code).capitalize()} en {nom_zone}, sur {pluriel(len(points), 'jour')} : "
             f"{mouvement}, de {prix_litre(debut)} a {prix_litre(fin)}"
             + (f" ({nombre(pourcent, 1)} %)" if pourcent is not None else "")
             + f". Extremes de la periode : {prix_litre(bas)} a {prix_litre(haut)}."
         )
         if len(points) < jours * 0.5:
             texte += (
-                f" Attention, seuls {len(points)} jours sur {jours} sont couverts : "
-                "la periode demandee depasse l'historique disponible pour cette zone."
+                f" Attention, {pluriel(len(points), 'jour')} seulement sur {jours} "
+                "sont couverts : la periode demandee depasse l'historique disponible "
+                "pour cette zone."
             )
 
         return ReponseTendance(

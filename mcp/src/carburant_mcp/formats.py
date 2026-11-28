@@ -180,3 +180,23 @@ def age_relatif(instant: dt.datetime, *, reference: dt.datetime) -> str:
         return f"il y a {jours} jours"
     mois = jours // 30
     return "il y a 1 mois" if mois == 1 else f"il y a {mois} mois"
+
+
+def pluriel(nombre_d_elements: int, singulier: str, forme_plurielle: str | None = None) -> str:
+    """Accorde un nom avec son nombre, en français.
+
+    Le francais met au singulier zero et un : « 0 jour », « 1 jour », « 2 jours ».
+    C'est la regle que l'anglais n'a pas, et l'oublier produit « sur 1 jours », ce
+    qu'aucun francophone n'ecrit.
+
+    >>> pluriel(0, "jour")
+    '0 jour'
+    >>> pluriel(1, "jour")
+    '1 jour'
+    >>> pluriel(2, "jour")
+    '2 jours'
+    >>> pluriel(3, "station", "stations")
+    '3 stations'
+    """
+    forme = singulier if abs(nombre_d_elements) < 2 else (forme_plurielle or singulier + "s")
+    return f"{nombre(nombre_d_elements, 0)}{INSECABLE_ETROITE}{forme}"
