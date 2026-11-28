@@ -1,0 +1,135 @@
+name: Performance de l'API
+
+# Mesure les temps de reponse de l'API **sur le VPS**, sur les vraies donnees.
+#
+# Pourquoi depuis un workflow et pas depuis la session de developpement : la session
+# n'a pas d'acces ssh au VPS, et surtout une mesure prise depuis un conteneur de
+# developpement a l'autre bout d'internet mesurerait la liaison, pas l'API.
+#
+# Deux mesures, et la distinction compte :
+#
+# - **dans le conteneur de l'API** : le temps que l'API met vraiment, Caddy, TLS et
+#   internet exclus. C'est le chiffre du critere de sortie du Jalon 3.
+# - **a travers Caddy depuis le runner** : ce qu'un visiteur ressent, liaison
+#   comprise. Informatif, et sans budget : la latence d'un runner GitHub vers un VPS
+#   a Marseille n'est pas une propriete de notre code.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repetitions:
+        description: "Tours de mesure (10 villes par tour)"
+        default: "20"
+        required: true
+      budget_ms:
+        description: "Budget p95 de /v1/stations/proches, en ms"
+        default: "300"
+        required: true
+
+concurrency:
+  group: performance
+  cancel-in-progress: false
+
+jobs:
+  mesurer:
+    name: Mesurer sur le VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Preparer la cle ssh
+        # Meme preparation que le deploiement et l'amorcage : `accept-new` plutot que
+        # `ssh-keyscan`, qui fait bannir le runner par fail2ban.
+        env:
+          CLE: ${{ secrets.VPS_CLE_PRIVEE }}
+          HOTE: ${{ secrets.VPS_HOST }}
+        run: |
+          set -eu
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$CLE" > ~/.ssh/deploiement
+          chmod 600 ~/.ssh/deploiement
+          {
+            echo 'Host vps-carburant'
+            echo "  HostName $HOTE"
+            echo "  User ${{ secrets.VPS_USER }}"
+            echo '  IdentityFile ~/.ssh/deploiement'
+            echo '  IdentitiesOnly yes'
+            echo '  StrictHostKeyChecking accept-new'
+            echo '  ConnectTimeout 15'
+            echo '  ServerAliveInterval 30'
+            echo '  ServerAliveCountMax 10'
+            echo '  ControlMaster auto'
+            echo '  ControlPath ~/.ssh/cm-%r@%h:%p'
+            echo '  ControlPersist 30m'
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Ce qui tourne, et sur quoi
+        # Une mesure sans son contexte ne vaut rien : on note la machine, la charge
+        # et le volume de donnees a cote des temps.
+        run: |
+          set -eu
+          ssh vps-carburant "uname -m && nproc && uptime && free -m | head -2 && \
+            df -BG --output=avail,size /opt | tail -1"
+          ssh vps-carburant "cd /opt/carburant && sudo docker compose -f compose.prod.yaml \
+            exec -T db psql -U carburant -tAc \"
+              SELECT 'prix: ' || count(*) FROM marts.fact_prix;
+              SELECT 'partitions: ' || count(*) FROM pg_inherits
+               WHERE inhparent = 'marts.fact_prix'::regclass;
+              SELECT 'agregats: ' || count(*) FROM marts.agregat_prix_jour;
+              SELECT 'base: ' || pg_size_pretty(pg_database_size('carburant'));
+            \""
+
+      - name: Mesurer dans le conteneur de l'API
+        # Le script est copie plutot que monte : `docker compose exec` ne cree pas de
+        # montage, et le conteneur de production ne contient pas le depot.
+        run: |
+          set -eu
+          scp infra/scripts/mesurer-p95.py vps-carburant:/tmp/mesurer-p95.py
+          ssh vps-carburant "sudo docker cp /tmp/mesurer-p95.py carburant_api:/tmp/mesurer-p95.py"
+          ssh vps-carburant "sudo docker exec carburant_api python /tmp/mesurer-p95.py \
+            --base http://localhost:8000 \
+            --repetitions ${{ inputs.repetitions }} \
+            --budget-ms ${{ inputs.budget_ms }}" | tee /tmp/interne.txt
+          ssh vps-carburant "sudo docker exec carburant_api rm -f /tmp/mesurer-p95.py; \
+            rm -f /tmp/mesurer-p95.py"
+
+      - name: Mesurer a travers Caddy, depuis le runner
+        # Sans budget : la latence runner GitHub -> VPS n'est pas une propriete de
+        # notre code. Informatif, pour savoir ce qu'un visiteur ressent.
+        env:
+          SITE: ${{ secrets.VPS_SITE_URL || 'https://carburant.144-24-195-97.sslip.io' }}
+        run: |
+          set -eu
+          python -m pip install --quiet httpx
+          python infra/scripts/mesurer-p95.py \
+            --base "$SITE" \
+            --repetitions 3 \
+            --budget-ms 100000 | tee /tmp/externe.txt
+
+      - name: Resume
+        if: always()
+        run: |
+          set -eu
+          {
+            echo '## Temps de reponse mesures sur le VPS'
+            echo
+            echo '### Dans le conteneur de l API (Caddy, TLS et internet exclus)'
+            echo
+            echo '```'
+            cat /tmp/interne.txt 2>/dev/null || echo 'mesure non effectuee'
+            echo '```'
+            echo
+            echo '### A travers Caddy, depuis le runner (liaison comprise, sans budget)'
+            echo
+            echo '```'
+            cat /tmp/externe.txt 2>/dev/null || echo 'mesure non effectuee'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fermer la connexion
+        if: always()
+        run: |
+          ssh -O exit vps-carburant 2>/dev/null || true
+          rm -f ~/.ssh/deploiement ~/.ssh/config ~/.ssh/cm-*

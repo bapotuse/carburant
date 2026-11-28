@@ -1036,11 +1036,13 @@ export interface components {
              */
             derniere_collecte?: string | null;
             /**
-             * Prix Connus
-             * @description Nombre de changements de prix historises. Le grain est le changement, pas la collecte : une station qui ne bouge pas son prix n'ajoute rien.
-             * @example 33153
+             * Prix Connus Environ
+             * @description **Estimation** du nombre de changements de prix historises, lue dans les statistiques de PostgreSQL. Le grain est le changement, pas la collecte : une station qui ne bouge pas son prix n'ajoute rien.
+             *
+             *     Pourquoi une estimation : les compter vraiment demande de parcourir 64 millions de lignes sur 242 partitions, soit une trentaine de secondes. Le chiffre sert a dire « environ 64 millions » en bas de page, pas a etre additionne. A afficher avec « environ ».
+             * @example 64062124
              */
-            prix_connus: number;
+            prix_connus_environ: number;
             /** Sources */
             sources: components["schemas"]["Source"][];
             /**

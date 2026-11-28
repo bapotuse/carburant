@@ -75,12 +75,17 @@ class ReponseMeta(BaseModel):
     stations_actives: int = Field(
         description="Stations vues lors des dernieres collectes.", examples=[9825]
     )
-    prix_connus: int = Field(
+    prix_connus_environ: int = Field(
         description=(
-            "Nombre de changements de prix historises. Le grain est le changement, "
-            "pas la collecte : une station qui ne bouge pas son prix n'ajoute rien."
+            "**Estimation** du nombre de changements de prix historises, lue dans les "
+            "statistiques de PostgreSQL. Le grain est le changement, pas la collecte : "
+            "une station qui ne bouge pas son prix n'ajoute rien.\n\n"
+            "Pourquoi une estimation : les compter vraiment demande de parcourir "
+            "64 millions de lignes sur 242 partitions, soit une trentaine de secondes. "
+            "Le chiffre sert a dire « environ 64 millions » en bas de page, pas a "
+            "etre additionne. A afficher avec « environ »."
         ),
-        examples=[33153],
+        examples=[64062124],
     )
     carburants: list[str] = Field(
         description="Les carburants publies par la source.",
@@ -124,7 +129,7 @@ async def meta(requete: Request, reponse: Response) -> ReponseMeta:
         derniere_collecte=etat.derniere_collecte,
         age_derniere_collecte_minutes=age,
         stations_actives=etat.stations_actives,
-        prix_connus=etat.prix_connus,
+        prix_connus_environ=etat.prix_connus_environ,
         carburants=etat.carburants,
         couverture=COUVERTURE,
         sources=SOURCES,

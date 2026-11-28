@@ -131,13 +131,47 @@ async def stations_proches(pool: Pool, recherche: Recherche) -> tuple[list[dict[
     return lignes, total
 
 
+# `/v1/meta` sert aussi de sonde de vivacite au conteneur (voir
+# `infra/docker/api.Dockerfile`), avec quatre secondes de budget. Il ne peut donc
+# contenir aucune requete lourde.
+#
+# **Le nombre de changements de prix est une estimation, et c'est delibere.**
+# `count(*) FROM marts.fact_prix` parcourt 64 millions de lignes reparties sur
+# 242 partitions, soit 8 Go : trente a quarante secondes sur le VPS. Cette requete
+# etait inoffensive au Jalon 1, quand la table contenait 33 000 lignes ; l'amorcage
+# de l'historique l'a rendue mortelle, et c'est le healthcheck qui l'a signale en
+# faisant echouer un deploiement. On lit donc l'estimation que PostgreSQL tient a
+# jour dans son catalogue, somme sur les partitions.
+#
+# `greatest(reltuples, 0)` : depuis PostgreSQL 14, `reltuples` vaut **-1** pour une
+# table jamais analysee -- une partition creee a l'instant, par exemple. Sans ce
+# garde-fou, une partition neuve retrancherait une unite au total.
+#
+# Le champ s'appelle `prix_connus_environ` pour que personne, front ou serveur MCP,
+# ne presente ce chiffre comme exact.
+_SQL_META = """
+SELECT (SELECT max(fin) FROM meta.execution_etl WHERE statut = 'succes')
+           AS derniere_collecte,
+       (SELECT count(*) FROM marts.dim_station WHERE active)
+           AS stations_actives,
+       (SELECT coalesce(sum(greatest(c.reltuples, 0)), 0)::bigint
+          FROM pg_class c
+          JOIN pg_inherits i ON i.inhrelid = c.oid
+         WHERE i.inhparent = 'marts.fact_prix'::regclass)
+           AS prix_connus_environ,
+       (SELECT array_agg(code ORDER BY ordre) FROM marts.dim_carburant)
+           AS carburants
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class Meta:
     """Ce que `/v1/meta` expose sur l'etat des donnees."""
 
     derniere_collecte: dt.datetime | None
     stations_actives: int
-    prix_connus: int
+    prix_connus_environ: int
+    """Estimation, pas un comptage. Voir `_SQL_META`."""
     carburants: list[str]
 
 
@@ -147,17 +181,7 @@ async def lire_meta(pool: Pool) -> Meta:
         pool.connection(timeout=DELAI_CONNEXION) as connexion,
         connexion.cursor(row_factory=dict_row) as curseur,
     ):
-        await curseur.execute(
-            """
-                SELECT (SELECT max(fin) FROM meta.execution_etl WHERE statut = 'succes')
-                           AS derniere_collecte,
-                       (SELECT count(*) FROM marts.dim_station WHERE active)
-                           AS stations_actives,
-                       (SELECT count(*) FROM marts.fact_prix) AS prix_connus,
-                       (SELECT array_agg(code ORDER BY ordre) FROM marts.dim_carburant)
-                           AS carburants
-            """
-        )
+        await curseur.execute(_SQL_META)
         ligne = await curseur.fetchone()
 
     if ligne is None:  # pragma: no cover - la requete rend toujours une ligne
@@ -165,7 +189,7 @@ async def lire_meta(pool: Pool) -> Meta:
     return Meta(
         derniere_collecte=ligne["derniere_collecte"],
         stations_actives=int(ligne["stations_actives"] or 0),
-        prix_connus=int(ligne["prix_connus"] or 0),
+        prix_connus_environ=int(ligne["prix_connus_environ"] or 0),
         carburants=list(ligne["carburants"] or []),
     )
 

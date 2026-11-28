@@ -163,7 +163,7 @@ Mesurés le 23/11/2026. Les cases vides seront remplies au jalon indiqué.
 | Changements de prix en 2025 | **5 297 799** (≈ 14 500/jour) | archive annuelle, comptage en streaming |
 | Doublons du grain sur 5,3 M de lignes | **1** | unicité `(station, carburant, maj)` |
 | Volume en base, 1 an | **307 Mo de données + 232 Mo d'index** | chargement réel dans PostgreSQL 18.7 |
-| Volume projeté, 2007 → aujourd'hui | **≈ 64 M de lignes, ≈ 6,5 Go** | extrapolation à partir du comptage réel de 16 années |
+| Volume projeté, 2007 → aujourd'hui | **≈ 64 M de lignes, ≈ 6,5 Go** | extrapolation au cadrage ; voir la ligne mesurée plus bas |
 | Durée du `COPY` de 5,3 M de lignes | **14,0 s** | `\timing` dans psql |
 | Requête « stations proches » | **13,7 ms** | `EXPLAIN ANALYZE`, 10 km autour du Prado, 14 partitions |
 | JS client, tout le site | **77,7 Ko gzip** | sortie de build Nuxt, mesurée fichier par fichier |
@@ -178,11 +178,17 @@ Mesurés le 23/11/2026. Les cases vides seront remplies au jalon indiqué.
 | Couverture des enseignes | **99,4 %** | 9 761 par identifiant officiel OSM, 8 par géographie, 59 sans |
 | Part de prix atypiques signalés | **1,21 %** | sur 25 359 prix frais, fourchette attendue 0,4 à 2,5 % |
 | Poids réel d'une ligne d'historique | **120,2 octets** | mesuré sur 5,9 M de lignes (431 Mo de données + 245 Mo d'index) |
-| Durée d'amorçage | **≈ 45 s par million de lignes** | parsing XML compris, mesuré sur l'archive 2022 |
+| Durée d'amorçage, en développement | **≈ 45 s par million de lignes** | parsing XML compris, mesuré sur l'archive 2022 |
+| Durée d'amorçage, **sur le VPS** | **≈ 123 s par million** (8 110 lignes/s) | Ampere aarch64 à CPU partagé : 2,7 fois plus lent que la machine de développement |
 | Agrégats journaliers | **86 392 lignes pour 365 jours**, en 34 s | année 2007 complète, calcul en une passe |
-| Durée de l'amorçage complet de l'historique | à mesurer (Jalon 2) | |
+| **Historique complet en base** | **64 062 124 changements de prix**, du 01/01/2007 au 26/11/2026 | amorçage complet sur le VPS, 20 années d'archives |
+| Taille de la base après amorçage | **8 477 Mo** | agrégats et index compris |
+| Durée de l'amorçage complet | **3 h 20** dont **2 h 11** de chargement | 20 archives téléchargées, parsées en streaming, agrégats recalculés année par année |
+| Partitions de `fact_prix` | **242**, partition DEFAULT à **0 ligne** | une par mois sur vingt ans |
+| Agrégats journaliers en base | **3 836 872 lignes** sur **7 299 jours** | France, 96 départements, 2 réseaux, 6 carburants |
+| Idempotence sur recouvrement réel | **44 843 prix déjà connus** en 2026 | ceux que le collecteur courant avait déjà chargés |
+| Prix atypiques après amorçage | **1,38 %** (379 sur 27 556) | seuil d'alerte à 5 % |
 | Scores Lighthouse mobile | à mesurer (Jalon 5) | |
-| Taux de couverture des enseignes OSM | à mesurer (Jalon 2) | |
 
 ## 6. Ce qui a été découvert en regardant les vraies données
 
@@ -271,10 +277,16 @@ c'est-à-dire des stations qui existent et qui vendent au prix affiché.
 6. *Pourquoi conserver un prix suspect ?* Parce que les prix les plus atypiques de
    France sont vrais. Les rejeter ferait disparaître les stations d'île et de montagne,
    qui sont précisément celles où connaître le prix a le plus de valeur.
-7. *Combien pèse l'historique complet, et pourquoi le charger entier ?* ≈ 6,5 Go pour
-   64 millions de lignes, mesuré. Le charger entier coûte moins d'une demi-heure et
-   permet des réponses comme « le jour de la semaine historiquement le moins cher » sur
-   19 ans, ce que des agrégats dégradés ne permettraient pas.
+7. *Combien pèse l'historique complet, et pourquoi le charger entier ?* **8 477 Mo pour
+   64 062 124 lignes**, chargées en 3 h 20 sur le VPS. Mesuré, pas estimé — et
+   l'estimation initiale était juste sur le nombre de lignes (à 0,1 % près) mais fausse
+   d'un facteur 2,7 sur la durée, parce qu'elle avait été chronométrée sur la machine de
+   développement et non sur l'Ampere à CPU partagé du VPS. Le charger entier permet des
+   réponses comme « le jour de la semaine historiquement le moins cher » sur **20 ans**,
+   ce que des agrégats dégradés ne permettraient pas. Et c'est cette anecdote-là qui a
+   obligé à écrire le calcul correctement : le prix est passé de 1,07 € à 1,86 € sur la
+   période, donc une moyenne brute par jour de la semaine mesure la hausse, pas l'effet
+   du jour. On compare chaque jour à la moyenne des sept jours centrés sur lui.
 8. *Qu'est-ce que vous ne pouvez pas faire avec ces données ?* Nommer les stations : le
    flux officiel ne contient ni nom ni enseigne. On les rapproche d'OpenStreetMap, avec
    un score et un taux de couverture affiché. Et il n'y a aucune station d'outre-mer

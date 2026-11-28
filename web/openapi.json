@@ -1374,12 +1374,12 @@
             ],
             "title": "Derniere Collecte"
           },
-          "prix_connus": {
-            "description": "Nombre de changements de prix historises. Le grain est le changement, pas la collecte : une station qui ne bouge pas son prix n'ajoute rien.",
+          "prix_connus_environ": {
+            "description": "**Estimation** du nombre de changements de prix historises, lue dans les statistiques de PostgreSQL. Le grain est le changement, pas la collecte : une station qui ne bouge pas son prix n'ajoute rien.\n\nPourquoi une estimation : les compter vraiment demande de parcourir 64 millions de lignes sur 242 partitions, soit une trentaine de secondes. Le chiffre sert a dire « environ 64 millions » en bas de page, pas a etre additionne. A afficher avec « environ ».",
             "examples": [
-              33153
+              64062124
             ],
-            "title": "Prix Connus",
+            "title": "Prix Connus Environ",
             "type": "integer"
           },
           "sources": {
@@ -1407,7 +1407,7 @@
         },
         "required": [
           "stations_actives",
-          "prix_connus",
+          "prix_connus_environ",
           "carburants",
           "couverture",
           "sources",

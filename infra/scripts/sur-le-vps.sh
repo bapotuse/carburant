@@ -63,7 +63,29 @@ fi
 titre "Demarrage de la pile"
 # `--wait` attend que les healthchecks passent au vert, et echoue sinon : sans cela,
 # un deploiement casse se terminerait en « succes ».
-compose up -d --wait --remove-orphans
+#
+# En cas d echec, on dit **pourquoi** avant de sortir. Sans ces lignes, le journal
+# du deploiement s arrete sur « container carburant_api is unhealthy » et il faut
+# deviner : le 28/11/2026 la cause etait un `count(*)` sur 64 millions de lignes qui
+# depassait les quatre secondes du healthcheck, et rien dans le journal ne le disait.
+if ! compose up -d --wait --remove-orphans; then
+    echo "::group::Pourquoi un conteneur est malade"
+    for service in api web db caddy; do
+        nom="carburant_${service}"
+        echo "--- $nom : etat et dernieres sondes"
+        sudo docker inspect "$nom" \
+            --format '{{.State.Status}} / {{if .State.Health}}{{.State.Health.Status}}{{else}}pas de sonde{{end}}' \
+            2>/dev/null || echo "conteneur absent"
+        # Le journal de la sonde porte la sortie et le code de chaque tentative :
+        # c est la seule trace de ce que le healthcheck a reellement obtenu.
+        sudo docker inspect "$nom" --format '{{range .State.Health.Log}}sortie={{.ExitCode}} {{.Output}}{{end}}' \
+            2>/dev/null | head -20 || true
+        echo "--- $nom : 40 dernieres lignes"
+        sudo docker logs --tail 40 "$nom" 2>&1 || true
+    done
+    echo "::endgroup::"
+    exit 1
+fi
 
 titre "Verification"
 # Depuis l'interieur du reseau Docker : a ce stade le DNS public ne pointe peut-etre

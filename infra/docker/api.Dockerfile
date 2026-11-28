@@ -57,6 +57,14 @@ EXPOSE 8000
 # Les confondre ferait echouer `docker compose up --wait` sur une pile parfaitement
 # fonctionnelle dont les donnees ont vieilli, et pousserait Docker a redemarrer un
 # conteneur qui va bien. Constate le 24/11/2026.
+#
+# **Consequence a ne pas perdre de vue : /v1/meta est un chemin critique.** Il a
+# quatre secondes pour repondre, sinon le conteneur est declare malade et le
+# deploiement echoue. Le 28/11/2026, un `count(*) FROM marts.fact_prix` qui y dormait
+# depuis le Jalon 1 -- inoffensif sur 33 000 lignes -- est devenu mortel apres
+# l'amorcage de l'historique : 64 millions de lignes sur 242 partitions, soit 8 Go a
+# parcourir. La requete de `/v1/meta` ne doit contenir que des lectures bornees ; un
+# test verrouille son plan d'execution (`test_meta_ne_compte_jamais_les_lignes_de_fact_prix`).
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/v1/meta', timeout=4).status == 200 else 1)"
 

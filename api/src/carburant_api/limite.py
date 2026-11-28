@@ -44,6 +44,18 @@ FENETRE_SECONDES: Final = 60.0
 ADRESSES_MAX: Final = 20_000
 """Au-delà, les plus anciennes sont oubliées. Borne la mémoire du compteur."""
 
+BOUCLE_LOCALE: Final = frozenset({"127.0.0.1", "::1"})
+"""Adresses de boucle locale, exemptées quand la requête n'a **pas** traversé le proxy.
+
+Ce n'est pas un trou : l'API ne publie aucun port, donc tout trafic public passe par
+Caddy, qui se présente avec l'adresse de **son** conteneur et pose un
+`X-Forwarded-For`. Une requête qui arrive sans cet en-tête depuis la boucle locale
+vient donc de l'intérieur du conteneur de l'API lui-même : la sonde de Docker, ou un
+script de maintenance. Une requête publique ne peut pas se faire passer pour
+celle-là, puisqu'elle arrive forcément avec un `X-Forwarded-For`, qui la ramène au
+cas général.
+"""
+
 
 @dataclass
 class _Compteur:
@@ -163,10 +175,14 @@ class MiddlewareLimite:
             await self.app(scope, receive, send)
             return
 
+        entetes = Headers(scope=scope)
         client = scope.get("client")
         repli = client[0] if client else "inconnu"
-        adresse = adresse_cliente(Headers(scope=scope), repli)
+        if not entetes.get("x-forwarded-for") and repli in BOUCLE_LOCALE:
+            await self.app(scope, receive, send)
+            return
 
+        adresse = adresse_cliente(entetes, repli)
         autorise, reessai = self.limiteur.autoriser(adresse)
         if autorise:
             await self.app(scope, receive, send)

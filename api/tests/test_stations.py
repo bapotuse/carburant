@@ -556,3 +556,59 @@ async def test_l_historique_d_une_station_inconnue_repond_404(
 ) -> None:
     reponse = await client.get("/v1/stations/99999999/historique")
     assert reponse.status_code == 404
+
+
+# ----------------------------------------------------------------------- /v1/meta
+@sans_base
+async def test_meta_ne_compte_jamais_les_lignes_de_fact_prix(base: str) -> None:
+    """Garde-fou de regression : `/v1/meta` est aussi la sonde de vivacite.
+
+    Elle a quatre secondes de budget. Un `count(*)` sur `marts.fact_prix` y etait
+    inoffensif au Jalon 1 (33 000 lignes) et est devenu mortel apres l'amorcage de
+    l'historique (64 millions de lignes sur 242 partitions, 8 Go) : il a fait
+    declarer le conteneur malade et echouer un deploiement.
+
+    Le test lit le plan d'execution et exige que la table de faits n'y figure pas du
+    tout. Verifier un temps de reponse ne prouverait rien ici : sur la petite base
+    de test, le comptage est instantane. C'est la **forme** du plan qu'il faut
+    verrouiller, pas sa vitesse.
+    """
+    from carburant_api.requetes.stations import _SQL_META
+
+    with psycopg.connect(base, autocommit=True) as connexion:
+        plan = "\n".join(
+            str(ligne[0]) for ligne in connexion.execute(f"EXPLAIN {_SQL_META}").fetchall()
+        )
+
+    assert "fact_prix" not in plan, (
+        "le plan de /v1/meta touche la table de faits ; elle pese 8 Go en production "
+        f"et la sonde de vivacite a quatre secondes.\nPlan obtenu :\n{plan}"
+    )
+    assert "pg_class" in plan, "le compte doit venir des statistiques du catalogue"
+
+
+@sans_base
+async def test_meta_annonce_un_ordre_de_grandeur_credible(
+    base: str, client: httpx.AsyncClient
+) -> None:
+    """L'estimation doit refleter les lignes chargees, apres `ANALYZE`.
+
+    Avant `ANALYZE`, `reltuples` vaut -1 sur une partition neuve depuis PostgreSQL 14 :
+    le `greatest(..., 0)` du SQL garantit alors un zero, jamais un negatif. Apres, on
+    retrouve l'ordre de grandeur. Le champ s'appelle `prix_connus_environ` precisement
+    parce qu'on ne promet pas mieux qu'un ordre de grandeur.
+    """
+    avant = (await client.get("/v1/meta")).json()
+    assert avant["prix_connus_environ"] >= 0, "jamais negatif, meme sans ANALYZE"
+
+    with psycopg.connect(base, autocommit=True) as connexion:
+        connexion.execute("ANALYZE marts.fact_prix")
+        ligne = connexion.execute("SELECT count(*) FROM marts.fact_prix").fetchone()
+    assert ligne is not None
+    reel = int(ligne[0])
+
+    apres = (await client.get("/v1/meta")).json()
+    estime = apres["prix_connus_environ"]
+    assert estime == pytest.approx(reel, rel=0.1), (
+        f"estimation {estime} contre {reel} lignes reellement presentes"
+    )

@@ -146,3 +146,29 @@ def test_la_sante_n_est_jamais_limitee() -> None:
     assert client.get("/v1/essai").status_code == 429
     for _ in range(5):
         assert client.get("/v1/sante").status_code == 200
+
+
+def test_la_boucle_locale_sans_proxy_n_est_pas_limitee() -> None:
+    """La sonde Docker et les scripts de maintenance passent toujours.
+
+    `TestClient` se presente par defaut comme `testclient` et non comme une adresse
+    de boucle locale -- ce qui est heureux, car cela prouve que les douze tests
+    ci-dessus exercent bien le limiteur et ne beneficient pas de cette exemption.
+    On force donc l'adresse du pair ici.
+    """
+    client = TestClient(_app_minimale(Limiteur(limite=2)), client=("127.0.0.1", 50000))
+    for _ in range(10):
+        assert client.get("/v1/essai").status_code == 200
+
+
+def test_la_boucle_locale_avec_un_proxy_est_limitee() -> None:
+    """Le trafic public arrive toujours avec un `X-Forwarded-For`.
+
+    C'est ce qui empeche un client public de profiter de l'exemption : des qu'il
+    passe par Caddy, l'en-tete est present et on retombe dans le cas general.
+    """
+    client = TestClient(_app_minimale(Limiteur(limite=2)), client=("127.0.0.1", 50000))
+    entetes = {"X-Forwarded-For": "203.0.113.7"}
+    assert client.get("/v1/essai", headers=entetes).status_code == 200
+    assert client.get("/v1/essai", headers=entetes).status_code == 200
+    assert client.get("/v1/essai", headers=entetes).status_code == 429

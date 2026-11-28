@@ -57,7 +57,8 @@ Le flux ne donne que l'état courant : on historise nous-mêmes. Pour amorcer l'
 
 **Périmètre retenu : historique complet 2007 → aujourd'hui, en détail, sans agrégats dégradés.**
 Mesuré : ≈ 64 M de lignes ≈ 6,5 Go en base, chargeables en moins de 30 minutes. Le volume ne
-justifie pas de dégrader les années anciennes.
+justifie pas de dégrader les années anciennes. *(Chiffres de cadrage, corrigés deux fois
+plus bas : 8,5 Go et 3 h 20 en réalité. Le périmètre retenu ne change pas.)*
 
 **[corrigé 26/11/2026] Volumétrie et durée revues à la hausse, par mesure.** Deux années
 réellement chargées (2007 et 2022, une par ère d'unité) : **5 905 672 lignes, 431 Mo de
@@ -67,6 +68,31 @@ mais il n'y a plus de marge pour un doublement.
 Durée : **222 s pour les 5,04 M de lignes de 2022**, soit ≈ 45 s par million, parsing XML
 compris. L'historique complet demande donc **≈ 50 minutes**, pas 30. L'amorçage se fait
 année par année, chacune étant idempotente : une coupure se reprend sans dégât.
+
+**[fait et mesuré 26/11/2026] L'amorçage complet a tourné sur le VPS.** Chiffres réels,
+qui remplacent les estimations ci-dessus :
+
+| | Estimé | Mesuré sur le VPS |
+|---|---|---|
+| Années | 2007 → 2026, **20 ans** | 20 ans, du 01/01/2007 au 26/11/2026 |
+| Lignes de `fact_prix` | ≈ 64 M | **64 062 124** |
+| Taille de la base entière | ≈ 7,7 Go | **8 477 Mo** (agrégats et index compris) |
+| Durée de chargement seul | ≈ 50 min | **2 h 11** (7 893 s cumulés) |
+| Durée de bout en bout | — | **3 h 20** (téléchargements et agrégats compris) |
+| Partitions | — | **242**, partition DEFAULT à **0 ligne** |
+| Lignes d'agrégat journalier | — | **3 836 872** sur **7 299 jours** |
+
+Le compte de lignes était juste à 0,1 % près. **La durée, non : 2,7 fois plus longue que
+prévu.** L'estimation de 45 s par million avait été mesurée dans l'environnement de
+développement (x86, disque local rapide) ; le VPS est un Ampere aarch64 à CPU partagé et
+tient 8 110 lignes par seconde, soit 123 s par million. Une durée mesurée sur la machine
+de développement ne se transporte pas sur le VPS — à retenir pour tout budget de temps
+dans ce projet.
+
+Les huit contrôles qualité sont au vert après amorçage, dont **1,38 % de prix atypiques**
+sur les 27 556 prix frais (seuil d'alerte : 5 %), et l'année 2026 a signalé **44 843 prix
+déjà connus** : exactement ceux que le collecteur courant avait déjà chargés. L'idempotence
+est donc vérifiée sur un recouvrement réel, pas seulement sur une relance à l'identique.
 
 ### Empreinte carbone
 **[corrigé 23/11/2026]** Base Carbone® de l'ADEME (Licence Ouverte). Le portail a **migré
