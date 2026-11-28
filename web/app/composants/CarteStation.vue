@@ -3,11 +3,19 @@
  * Une station dans la liste des résultats.
  *
  * Le prix est le héros : il est plus grand que tout le reste et aligné à droite,
- * pour qu'on puisse comparer une colonne de prix d'un coup d'œil. L'adresse sert
- * d'identité, puisque le flux officiel ne donne ni nom ni enseigne.
+ * pour qu'on puisse comparer une colonne de prix d'un coup d'œil.
+ *
+ * **L'identité d'une station est son enseigne quand on la connaît, son adresse
+ * sinon.** Le flux officiel ne publie ni nom ni enseigne ; celles-ci viennent
+ * d'OpenStreetMap, qui en couvre plus de 99 stations sur 100. Quand elle manque, on
+ * n'invente pas un nom pour combler le vide — l'adresse fait l'identité.
+ *
+ * La carte entière mène à la fiche, sauf le lien d'itinéraire : deux cibles
+ * imbriquées sont invalides en HTML et imprévisibles au doigt. Le lien couvre donc le
+ * titre, et la carte relaie le clic.
  */
 import type { Station } from '../composables/api'
-import { distanceKm } from '../composables/formats'
+import { adresseLisible, distanceKm } from '../composables/formats'
 
 const { station, rang } = defineProps<{
   station: Station
@@ -18,7 +26,18 @@ const { station, rang } = defineProps<{
 /** Le prix affiché : celui du carburant demandé, donc le premier de la liste. */
 const prix = computed(() => station.prix[0])
 
-const lieu = computed(() => [station.adresse, station.ville].filter(Boolean).join(', '))
+/** Le titre : l'enseigne si OpenStreetMap la connaît, sinon l'adresse lisible. */
+const titre = computed(
+  () => station.enseigne?.nom ?? (station.adresse ? adresseLisible(station.adresse) : 'Station'),
+)
+
+/** Sous le titre : l'adresse, et la ville. Sans répéter le titre quand il l'est déjà. */
+const lieu = computed(() => {
+  const morceaux = station.enseigne?.nom
+    ? [station.adresse ? adresseLisible(station.adresse) : null, station.ville]
+    : [station.ville]
+  return morceaux.filter(Boolean).join(', ')
+})
 
 /** Liens d'itinéraire. L'ordre s'adapte à la plateforme au Jalon 5. */
 const itineraire = computed(
@@ -30,7 +49,10 @@ const itineraire = computed(
 <template>
   <li class="station" :class="{ 'station--premier': rang === 1 }">
     <div class="station__identite">
-      <p class="station__lieu">{{ lieu }}</p>
+      <p class="station__titre">
+        <NuxtLink class="station__lien" :to="`/station/${station.id}`">{{ titre }}</NuxtLink>
+      </p>
+      <p v-if="lieu" class="station__lieu">{{ lieu }}</p>
       <p class="station__repere">
         <span>{{ distanceKm(station.distance_km) }}</span>
         <span v-if="station.autoroute" class="station__autoroute">autoroute</span>
@@ -72,7 +94,34 @@ const itineraire = computed(
   min-inline-size: 0;
 }
 
+.station__titre {
+  margin: 0;
+  font-size: var(--t-m);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.station__lien {
+  display: inline-block;
+  /* La cible fait 44 px de haut sans grossir le texte : c'est le `padding` vertical
+     qui porte la hauteur, pas la police. Mesure exigee par docs/specs/web.md et
+     verifiee par un test Playwright. */
+  padding-block: var(--e-2);
+  color: var(--encre);
+  text-decoration-color: var(--bordure);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.station__lien:hover,
+.station__lien:focus-visible {
+  text-decoration-color: currentcolor;
+}
+
 .station__lieu {
+  margin: 0;
+  color: var(--encre-2);
   font-size: var(--t-s);
   line-height: 1.3;
   overflow-wrap: anywhere;

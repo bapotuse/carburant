@@ -728,3 +728,63 @@ async def test_demander_les_perimes_les_ramene(base: str, monkeypatch: pytest.Mo
     identifiants_avec = {ligne["id"] for ligne in avec[0]}
     assert 3 not in identifiants_sans, "la station au prix perime doit etre absente"
     assert 3 in identifiants_avec, "elle doit revenir quand on demande les perimes"
+
+
+@sans_base
+async def test_la_recherche_rend_l_enseigne_avec_sa_provenance(
+    base: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Le champ existait depuis le Jalon 1 et rendait toujours `None`.
+
+    C'etait une `@property` laissee en place avec un commentaire disant « le
+    rapprochement arrive au Jalon 2 ». Le Jalon 2 a eu lieu, la fiche et la meilleure
+    station rendaient deja l'enseigne, et la recherche -- l'endroit ou elle est la plus
+    utile -- continuait d'annoncer un champ vide. Trouve en construisant la liste de
+    resultats du site, pas en relisant le code.
+    """
+    assert URL
+    with psycopg.connect(base, autocommit=True) as connexion:
+        connexion.execute(
+            "UPDATE marts.dim_station SET enseigne = 'TotalEnergies', "
+            "enseigne_source = 'osm-reference', enseigne_score = 1.0, "
+            "enseigne_osm = 'node/144574' WHERE id = 1"
+        )
+        connexion.execute("REFRESH MATERIALIZED VIEW marts.reference_departementale")
+
+    import os as _os
+
+    from carburant_api.requetes.connexion import creer_pool
+    from carburant_api.requetes.stations import Recherche, stations_proches
+
+    _os.environ["DATABASE_URL"] = base
+    pool = creer_pool()
+    await pool.open(wait=True)
+    try:
+        lignes, _ = await stations_proches(
+            pool,
+            Recherche(
+                latitude=43.2726,
+                longitude=5.3846,
+                rayon_km=10,
+                carburant="gazole",
+                tri="prix",
+                limite=50,
+                decalage=0,
+            ),
+        )
+    finally:
+        await pool.close()
+
+    avec_enseigne = [ligne for ligne in lignes if ligne["id"] == 1]
+    assert avec_enseigne, "la station 1 doit sortir de la recherche"
+    ligne = avec_enseigne[0]
+    assert ligne["enseigne"] == "TotalEnergies"
+    # La provenance accompagne la valeur : un rapprochement geographique merite plus
+    # de prudence qu'une correspondance d'identifiant, et l'affichage doit pouvoir
+    # en juger.
+    assert ligne["enseigne_source"] == "osm-reference"
+    assert ligne["enseigne_osm"] == "node/144574"
+
+    sans_enseigne = [ligne for ligne in lignes if ligne["id"] != 1]
+    assert sans_enseigne, "le jeu d'essai doit aussi contenir des stations sans enseigne"
+    assert all(ligne["enseigne"] is None for ligne in sans_enseigne)

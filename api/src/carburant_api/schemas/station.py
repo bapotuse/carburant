@@ -80,61 +80,6 @@ class PrixCarburant(BaseModel):
     )
 
 
-class StationProche(BaseModel):
-    """Une station trouvee autour d'un point."""
-
-    id: int = Field(description="Identifiant officiel de la station.", examples=[13008003])
-    adresse: str | None = Field(default=None, examples=["32 boulevard Schloesing"])
-    ville: str | None = Field(default=None, examples=["Marseille"])
-    cp: str | None = Field(default=None, examples=["13010"])
-    departement: str | None = Field(default=None, examples=["Bouches-du-Rhône"])
-    code_departement: str | None = Field(default=None, examples=["13"])
-    autoroute: bool = Field(
-        description="Vrai si la station est sur autoroute. 4,4 % des stations.",
-        examples=[False],
-    )
-    latitude: float = Field(examples=[43.2726])
-    longitude: float = Field(examples=[5.3846])
-    distance_km: Annotated[float, Field(ge=0)] = Field(
-        description="Distance a vol d'oiseau depuis le point demande, en kilometres.",
-        examples=[1.3],
-    )
-    prix: list[PrixCarburant] = Field(
-        description=(
-            "Les prix connus de cette station. Quand la recherche porte sur un "
-            "carburant, la liste n'en contient qu'un."
-        )
-    )
-
-    @property
-    def enseigne(self) -> None:
-        """Le flux officiel ne contient ni nom ni enseigne de station.
-
-        Le rapprochement avec OpenStreetMap arrive au Jalon 2. D'ici la, une station
-        s'identifie par son adresse et sa ville, et on ne l'invente pas.
-        """
-        return None
-
-
-class ReponseStationsProches(BaseModel):
-    """Resultat d'une recherche de stations autour d'un point."""
-
-    stations: list[StationProche]
-    total: int = Field(description="Nombre de stations trouvees avant pagination.", examples=[57])
-    rayon_km: float = Field(description="Rayon effectivement applique.", examples=[10.0])
-    carburant: str | None = Field(
-        default=None, description="Carburant demande, s'il y en avait un."
-    )
-    tri: str = Field(description="Critere de tri applique.", examples=["prix"])
-    derniere_collecte: dt.datetime | None = Field(
-        default=None,
-        description=(
-            "Instant de la derniere collecte reussie. C'est la fraicheur de "
-            "l'ensemble des donnees, a distinguer de celle de chaque prix."
-        ),
-    )
-
-
 class Enseigne(BaseModel):
     """L'enseigne d'une station, avec la facon dont elle a ete trouvee.
 
@@ -161,6 +106,61 @@ class Enseigne(BaseModel):
         default=None,
         description="Objet OpenStreetMap rapproche, pour pouvoir verifier.",
         examples=["node/144574"],
+    )
+
+
+class StationProche(BaseModel):
+    """Une station trouvee autour d'un point."""
+
+    id: int = Field(description="Identifiant officiel de la station.", examples=[13008003])
+    adresse: str | None = Field(default=None, examples=["32 boulevard Schloesing"])
+    ville: str | None = Field(default=None, examples=["Marseille"])
+    cp: str | None = Field(default=None, examples=["13010"])
+    departement: str | None = Field(default=None, examples=["Bouches-du-Rhône"])
+    code_departement: str | None = Field(default=None, examples=["13"])
+    autoroute: bool = Field(
+        description="Vrai si la station est sur autoroute. 4,4 % des stations.",
+        examples=[False],
+    )
+    latitude: float = Field(examples=[43.2726])
+    longitude: float = Field(examples=[5.3846])
+    distance_km: Annotated[float, Field(ge=0)] = Field(
+        description="Distance a vol d'oiseau depuis le point demande, en kilometres.",
+        examples=[1.3],
+    )
+    prix: list[PrixCarburant] = Field(
+        description=(
+            "Les prix connus de cette station. Quand la recherche porte sur un "
+            "carburant, la liste n'en contient qu'un."
+        )
+    )
+
+    enseigne: Enseigne | None = Field(
+        default=None,
+        description=(
+            "Enseigne quand OpenStreetMap la connait, avec sa provenance. Absente "
+            "sinon : le flux officiel ne publie ni nom ni enseigne, et on ne les "
+            "invente pas -- la station s'identifie alors par son adresse."
+        ),
+    )
+
+
+class ReponseStationsProches(BaseModel):
+    """Resultat d'une recherche de stations autour d'un point."""
+
+    stations: list[StationProche]
+    total: int = Field(description="Nombre de stations trouvees avant pagination.", examples=[57])
+    rayon_km: float = Field(description="Rayon effectivement applique.", examples=[10.0])
+    carburant: str | None = Field(
+        default=None, description="Carburant demande, s'il y en avait un."
+    )
+    tri: str = Field(description="Critere de tri applique.", examples=["prix"])
+    derniere_collecte: dt.datetime | None = Field(
+        default=None,
+        description=(
+            "Instant de la derniere collecte reussie. C'est la fraicheur de "
+            "l'ensemble des donnees, a distinguer de celle de chaque prix."
+        ),
     )
 
 

@@ -20,8 +20,32 @@ import { randomBytes } from 'node:crypto'
  * ne protege de rien. `randomBytes` est le generateur cryptographique de Node.
  */
 
+/**
+ * L'origine de l'API, quand elle n'est pas celle du site.
+ *
+ * En production les deux partagent le domaine, derriere Caddy : `'self'` suffit. En
+ * developpement le site est sur `:3000` et l'API sur `:8000`, et `connect-src 'self'`
+ * **bloque tous les appels** -- le site s'affiche, annonce « le service ne repond
+ * pas », et la console explique pourquoi. Constate en ouvrant un vrai navigateur sur
+ * la pile locale ; aucun test n'en parlait, et quiconque clone le depot tombait
+ * dessus.
+ *
+ * On ajoute donc l'origine configuree, et elle seule : pas de joker.
+ */
+function origineApi(): string {
+  const base = useRuntimeConfig().public.apiBase
+  if (!base) return ''
+  try {
+    const origine = new URL(base).origin
+    return origine
+  } catch {
+    // Une base relative (`/v1`) partage l'origine du site : `'self'` la couvre deja.
+    return ''
+  }
+}
+
 /** Ce que la page a le droit de charger. `{nonce}` est remplace a chaque requete. */
-function politique(nonce: string): string {
+function politique(nonce: string, api: string): string {
   return [
     "default-src 'self'",
     // `data:` pour les SVG en ligne, `blob:` pour les tuiles de MapLibre (Jalon 5).
@@ -33,7 +57,7 @@ function politique(nonce: string): string {
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
-    "connect-src 'self'",
+    `connect-src 'self'${api ? ` ${api}` : ''}`,
     "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",
@@ -48,11 +72,14 @@ function marquer(fragment: string, nonce: string): string {
 }
 
 export default defineNitroPlugin((nitro) => {
+  // Calculee une fois : la configuration ne change pas d'une requete a l'autre, et
+  // analyser une URL par reponse serait du travail pour rien.
+  const api = origineApi()
   nitro.hooks.hook('render:html', (html, { event }) => {
     const nonce = randomBytes(16).toString('base64')
     for (const partie of ['head', 'bodyPrepend', 'bodyAppend'] as const) {
       html[partie] = html[partie].map((fragment) => marquer(fragment, nonce))
     }
-    setResponseHeader(event, 'Content-Security-Policy', politique(nonce))
+    setResponseHeader(event, 'Content-Security-Policy', politique(nonce, api))
   })
 })

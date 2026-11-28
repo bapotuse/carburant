@@ -77,6 +77,14 @@ WITH point AS (
 candidates AS (
     SELECT s.id, s.adresse, s.ville, s.cp, s.departement, s.code_departement,
            s.autoroute,
+           -- L'enseigne vient d'OpenStreetMap et couvre plus de 99 stations sur
+           -- 100. Pas de signe pour-cent dans ce commentaire : psycopg le lit comme
+           -- un marqueur de parametre et refuse la requete. Trouve par les tests
+           -- d'integration, en une seconde, apres l'avoir ecrit sans y penser. Elle
+           -- manquait a cette requete alors que la fiche et la meilleure station la
+           -- rendaient deja : le champ existait dans le schema, sous forme de
+           -- propriete rendant toujours `None` depuis le Jalon 1.
+           s.enseigne, s.enseigne_source, s.enseigne_score, s.enseigne_osm,
            ST_Y(s.geom::geometry) AS latitude,
            ST_X(s.geom::geometry) AS longitude,
            ST_Distance(s.geom, point.g) / 1000.0 AS distance_km

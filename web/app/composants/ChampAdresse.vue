@@ -39,6 +39,23 @@ const identifiant = useId()
 let minuteur: ReturnType<typeof setTimeout> | undefined
 let derniereRequete = 0
 
+/**
+ * Vrai quand `texte` est modifie **par le code** et non par la frappe.
+ *
+ * Sans ce drapeau, chaque assignation interne relance le geocodage : choisir un
+ * candidat geocodait son propre libelle, et cliquer « Ma position » geocodait la
+ * chaine « Ma position ». Deux requetes inutiles par recherche, sur un service dont
+ * le quota est partage -- et la seconde demandait au geocodeur de l'IGN de trouver un
+ * lieu appele « Ma position ». Constate en ouvrant un vrai navigateur, pas en relisant.
+ */
+let assignationInterne = false
+
+/** Ecrit dans le champ sans declencher de recherche. */
+function poser(valeur: string): void {
+  assignationInterne = true
+  texte.value = valeur
+}
+
 async function interroger(valeur: string): Promise<void> {
   const requete = ++derniereRequete
   cherche.value = true
@@ -68,6 +85,10 @@ function messageDe(erreur: unknown): string {
 
 watch(texte, (valeur) => {
   clearTimeout(minuteur)
+  if (assignationInterne) {
+    assignationInterne = false
+    return
+  }
   const propre = valeur.trim()
   if (propre.length < LONGUEUR_MINIMALE) {
     candidats.value = []
@@ -81,7 +102,7 @@ watch(texte, (valeur) => {
 onBeforeUnmount(() => clearTimeout(minuteur))
 
 function choisir(candidat: Candidat): void {
-  texte.value = candidat.libelle
+  poser(candidat.libelle)
   candidats.value = []
   ambigu.value = false
   vide.value = false
@@ -108,7 +129,7 @@ function maPosition(): void {
   navigator.geolocation.getCurrentPosition(
     (position) => {
       localise.value = false
-      texte.value = 'Ma position'
+      poser('Ma position')
       candidats.value = []
       vide.value = false
       emit('choisi', {

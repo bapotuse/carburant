@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+from collections.abc import Mapping
 from typing import Annotated, Any, Final
 
 from fastapi import APIRouter, Path, Query, Request, Response, status
@@ -52,6 +53,24 @@ CARBURANTS: Final = ("gazole", "sp95", "e10", "sp98", "e85", "gplc")
 # renverra jamais rien, autant le dire franchement.
 EMPRISE_LAT: Final = (41.0, 51.5)
 EMPRISE_LON: Final = (-5.5, 10.0)
+
+
+def _enseigne(ligne: Mapping[str, Any]) -> Enseigne | None:
+    """L'enseigne d'une ligne de resultat, ou `None` quand on ne la connait pas.
+
+    Partagee par la recherche et la fiche : deux constructions auraient fini par
+    rendre deux formes differentes pour la meme donnee, et c'est exactement ce qui
+    s'etait produit -- la recherche rendait un champ toujours vide.
+    """
+    if not ligne.get("enseigne"):
+        return None
+    score = ligne.get("enseigne_score")
+    return Enseigne(
+        nom=str(ligne["enseigne"]),
+        source=str(ligne.get("enseigne_source") or "inconnue"),
+        score=float(score) if score else None,
+        objet_osm=ligne.get("enseigne_osm"),
+    )
 
 
 def _verifier_emprise(lat: float, lon: float) -> None:
@@ -101,6 +120,7 @@ def _regrouper(lignes: list[dict[str, Any]]) -> list[StationProche]:
                 latitude=float(ligne["latitude"]),
                 longitude=float(ligne["longitude"]),
                 distance_km=round(float(ligne["distance_km"]), 3),
+                enseigne=_enseigne(ligne),
                 prix=[],
             )
             par_station[identifiant] = station
@@ -425,16 +445,7 @@ async def fiche_station(
             type_=f"{BASE_TYPE}#station-inconnue",
         )
 
-    enseigne = (
-        Enseigne(
-            nom=station["enseigne"],
-            source=station["enseigne_source"] or "inconnue",
-            score=float(station["enseigne_score"]) if station["enseigne_score"] else None,
-            objet_osm=station["enseigne_osm"],
-        )
-        if station["enseigne"]
-        else None
-    )
+    enseigne = _enseigne(station)
 
     corps = FicheStation(
         id=int(station["id"]),

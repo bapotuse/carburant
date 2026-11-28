@@ -25,6 +25,15 @@ export type Candidat = Geocodage['candidats'][number]
 
 export type Meta = Chemins['/v1/meta']['get']['responses']['200']['content']['application/json']
 
+export type Fiche =
+  Chemins['/v1/stations/{station_id}']['get']['responses']['200']['content']['application/json']
+export type PrixFiche = NonNullable<Fiche['prix']>[number]
+export type EnseigneTrouvee = NonNullable<Fiche['enseigne']>
+
+export type Historique =
+  Chemins['/v1/stations/{station_id}/historique']['get']['responses']['200']['content']['application/json']
+export type Changement = NonNullable<Historique['changements']>[number]
+
 /** Une erreur renvoyée par l'API, au format problem+json. */
 export class ErreurAPI extends Error {
   readonly statut: number
@@ -115,4 +124,28 @@ export function geocoder(q: string, limite = 5): Promise<Geocodage> {
 /** L'état des données servies : dernière collecte, volumes, couverture. */
 export function meta(): Promise<Meta> {
   return appeler<Meta>('/v1/meta', {})
+}
+
+/**
+ * Une station et tous ses prix.
+ *
+ * Contrairement à une recherche, cette réponse **ne cache rien** : les prix périmés y
+ * figurent avec leur date, et les carburants en rupture sont marqués comme tels. La
+ * page doit le montrer, pas le filtrer — c'est tout l'intérêt d'une fiche.
+ */
+export function station(id: number): Promise<Fiche> {
+  return appeler<Fiche>(`/v1/stations/${id}`, {})
+}
+
+/** L'historique des changements de prix d'une station, du plus récent au plus ancien. */
+export function historique(
+  id: number,
+  options: { carburant?: string; jours?: number; limite?: number } = {},
+): Promise<Historique> {
+  const parametres: Record<string, string> = {
+    jours: String(options.jours ?? 365),
+    limite: String(options.limite ?? 500),
+  }
+  if (options.carburant) parametres.carburant = options.carburant
+  return appeler<Historique>(`/v1/stations/${id}/historique`, parametres)
 }

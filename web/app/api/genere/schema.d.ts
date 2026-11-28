@@ -1369,6 +1369,8 @@ export interface components {
              * @example 1.3
              */
             distance_km: number;
+            /** @description Enseigne quand OpenStreetMap la connait, avec sa provenance. Absente sinon : le flux officiel ne publie ni nom ni enseigne, et on ne les invente pas -- la station s'identifie alors par son adresse. */
+            enseigne?: components["schemas"]["Enseigne"] | null;
             /**
              * Id
              * @description Identifiant officiel de la station.

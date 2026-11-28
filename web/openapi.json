@@ -2019,6 +2019,17 @@
             "title": "Distance Km",
             "type": "number"
           },
+          "enseigne": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Enseigne"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enseigne quand OpenStreetMap la connait, avec sa provenance. Absente sinon : le flux officiel ne publie ni nom ni enseigne, et on ne les invente pas -- la station s'identifie alors par son adresse."
+          },
           "id": {
             "description": "Identifiant officiel de la station.",
             "examples": [
