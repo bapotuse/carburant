@@ -4,6 +4,33 @@
  */
 
 export interface paths {
+    "/v1/anecdotes/du-jour": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Les chiffres du jour
+         * @description Quatre anecdotes calculees depuis la base, pour un carburant :
+         *
+         *     1. **ecart_du_jour** — l'ecart entre la station la moins chere et la plus chere de France aujourd'hui, les deux stations nommees ;
+         *     2. **departement_moins_cher** — sur les sept derniers jours calcules ;
+         *     3. **surcout_autoroute** — ce que coute en plus un plein de 50 L sur autoroute ;
+         *     4. **jour_semaine_moins_cher** — le jour de la semaine historiquement le moins cher, **tendance de fond retiree** : le prix est passe de 1,07 EUR a 1,86 EUR en seize ans, et moyenner les prix par jour de la semaine mesurerait cette hausse, pas l'effet du jour.
+         *
+         *     **Chaque anecdote a un seuil minimal de donnees.** Sous son seuil, elle n'est pas approximee : elle apparait dans `indisponibles` avec sa raison et la mesure obtenue. Sur une base fraichement amorcee, les anecdotes historiques sont donc absentes, et elles le disent.
+         */
+        get: operations["anecdotes_du_jour_v1_anecdotes_du_jour_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/empreinte": {
         parameters: {
             query?: never;
@@ -237,6 +264,29 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AnecdoteIndisponible
+         * @description Une anecdote que les données du jour ne permettent pas de calculer.
+         */
+        AnecdoteIndisponible: {
+            /**
+             * Cle
+             * @example jour_semaine_moins_cher
+             */
+            cle: string;
+            /**
+             * Mesure
+             * @description Ce qu'on a reellement, pour que le seuil soit verifiable.
+             * @example 1 jour de la semaine couvert, 0 semaine pour le moins bien pourvu
+             */
+            mesure: string;
+            /**
+             * Raison
+             * @description Le seuil, en clair.
+             * @example Il faut 52 semaines d'historique pour chacun des sept jours.
+             */
+            raison: string;
+        };
+        /**
          * Candidat
          * @description Un lieu propose par le geocodeur.
          */
@@ -299,6 +349,107 @@ export interface components {
              * @example 1.879
              */
             prix_eur_l: number;
+        };
+        /**
+         * DepartementMoinsCher
+         * @description Le département le moins cher sur les sept derniers jours calculés.
+         */
+        DepartementMoinsCher: {
+            /**
+             * Code Departement
+             * @example 46
+             */
+            code_departement: string;
+            /**
+             * Departements Compares
+             * @description Departements ayant atteint les deux seuils, donc reellement compares.
+             * @example 96
+             */
+            departements_compares: number;
+            /**
+             * Ecart Au National Eur L
+             * @description Negatif : c'est ce qui fait de ce departement le moins cher.
+             * @example -0.05
+             */
+            ecart_au_national_eur_l?: number | null;
+            /**
+             * Jour Fin
+             * Format: date
+             * @description Dernier jour de la fenetre. La fenetre est calee sur le dernier agregat calcule, pas sur aujourd'hui : si la collecte date d'hier, une fenetre calee sur aujourd'hui perdrait un jour pour rien.
+             * @example 2026-11-26
+             */
+            jour_fin: string;
+            /**
+             * Jours
+             * @description Jours d'agregat trouves sur les sept.
+             * @example 7
+             */
+            jours: number;
+            /**
+             * Prix Median Eur L
+             * @description Moyenne des medianes journalieres du departement sur la fenetre.
+             * @example 1.812
+             */
+            prix_median_eur_l: number;
+            /**
+             * Prix National Eur L
+             * @example 1.862
+             */
+            prix_national_eur_l?: number | null;
+            /**
+             * Stations
+             * @description Le plus petit effectif journalier du departement sur la fenetre.
+             * @example 34
+             */
+            stations: number;
+        };
+        /**
+         * EcartDuJour
+         * @description L'écart entre la station la moins chère et la plus chère de France.
+         */
+        EcartDuJour: {
+            /**
+             * Ecart Eur L
+             * @description La difference entre les deux. C'est le chiffre de l'anecdote.
+             * @example 0.75
+             */
+            ecart_eur_l: number;
+            moins_chere: components["schemas"]["StationBorne"];
+            plus_chere: components["schemas"]["StationBorne"];
+            /**
+             * Prix Max Eur L
+             * @example 2.299
+             */
+            prix_max_eur_l: number;
+            /**
+             * Prix Min Eur L
+             * @example 1.549
+             */
+            prix_min_eur_l: number;
+            /**
+             * Stations
+             * @description Stations retenues : prix frais ou recent, hors rupture et hors prix atypique.
+             * @example 9432
+             */
+            stations: number;
+        };
+        /**
+         * EcartJourSemaine
+         * @description L'écart moyen d'un jour de la semaine à sa propre semaine.
+         */
+        EcartJourSemaine: {
+            /**
+             * Ecart Eur L
+             * @description Negatif : ce jour-la est moins cher que la moyenne de sa semaine.
+             * @example -0.0043
+             */
+            ecart_eur_l: number;
+            /**
+             * Jour Semaine
+             * @description Norme ISO-8601 : 1 = lundi, 7 = dimanche.
+             * @example 2
+             */
+            jour_semaine: number;
         };
         /**
          * Empreinte
@@ -570,6 +721,39 @@ export interface components {
             prix_du_trajet: string;
         };
         /**
+         * JourSemaineMoinsCher
+         * @description Le jour de la semaine historiquement le moins cher.
+         */
+        JourSemaineMoinsCher: {
+            /**
+             * Classement
+             * @description Les sept jours, du moins cher au plus cher.
+             */
+            classement: components["schemas"]["EcartJourSemaine"][];
+            /**
+             * Ecart Eur L
+             * @example -0.0043
+             */
+            ecart_eur_l: number;
+            /**
+             * Jour Semaine
+             * @description Norme ISO-8601 : 1 = lundi, 7 = dimanche.
+             * @example 2
+             */
+            jour_semaine: number;
+            /**
+             * Methode
+             * @description Comment la tendance de fond a ete retiree. Sans ce retrait, le resultat mesurerait la hausse des prix sur seize ans.
+             */
+            methode: string;
+            /**
+             * Semaines
+             * @description Semaines d'observation pour le jour le moins bien pourvu.
+             * @example 921
+             */
+            semaines: number;
+        };
+        /**
          * PointSerie
          * @description Un jour d'une serie de prix.
          */
@@ -643,6 +827,33 @@ export interface components {
             prix_eur_l?: number | null;
             /** @description Renseigne si le carburant est declare indisponible. */
             rupture?: components["schemas"]["Rupture"] | null;
+        };
+        /**
+         * ReponseAnecdotes
+         * @description Les anecdotes calculables aujourd'hui, et celles qui ne le sont pas.
+         */
+        ReponseAnecdotes: {
+            /**
+             * Calcule Le
+             * Format: date-time
+             * @description Instant du calcul. Une anecdote s'affiche toujours avec sa date.
+             * @example 2026-11-26T19:05:00Z
+             */
+            calcule_le: string;
+            /**
+             * Carburant
+             * @example gazole
+             */
+            carburant: string;
+            departement_moins_cher?: components["schemas"]["DepartementMoinsCher"] | null;
+            ecart_du_jour?: components["schemas"]["EcartDuJour"] | null;
+            /**
+             * Indisponibles
+             * @description Les anecdotes sous leur seuil, avec leur raison. Elles sont declarees plutot que passees sous silence : un seuil non atteint est une information, pas un oubli.
+             */
+            indisponibles?: components["schemas"]["AnecdoteIndisponible"][];
+            jour_semaine_moins_cher?: components["schemas"]["JourSemaineMoinsCher"] | null;
+            surcout_autoroute?: components["schemas"]["SurcoutAutoroute"] | null;
         };
         /**
          * ReponseComparaison
@@ -985,6 +1196,49 @@ export interface components {
             url: string;
         };
         /**
+         * StationBorne
+         * @description Une des deux bornes de l'écart du jour.
+         */
+        StationBorne: {
+            /**
+             * Autoroute
+             * @description Une borne sur autoroute n'a pas la meme signification qu'une borne en ville.
+             * @default false
+             * @example false
+             */
+            autoroute: boolean;
+            /**
+             * Code Departement
+             * @example 13
+             */
+            code_departement?: string | null;
+            /**
+             * Cp
+             * @example 13008
+             */
+            cp?: string | null;
+            /**
+             * Maj
+             * @example 2026-11-26T08:12:00Z
+             */
+            maj?: string | null;
+            /**
+             * Prix Eur L
+             * @example 1.699
+             */
+            prix_eur_l: number;
+            /**
+             * Station Id
+             * @example 13008003
+             */
+            station_id: number;
+            /**
+             * Ville
+             * @example Marseille
+             */
+            ville?: string | null;
+        };
+        /**
          * StationEvaluee
          * @description Une station atteignable, avec le detail de son cout.
          */
@@ -1140,6 +1394,55 @@ export interface components {
              */
             ville?: string | null;
         };
+        /**
+         * SurcoutAutoroute
+         * @description Le surcoût d'un plein de 50 L pris sur autoroute.
+         */
+        SurcoutAutoroute: {
+            /**
+             * Ecart Eur L
+             * @example 0.227
+             */
+            ecart_eur_l: number;
+            /**
+             * Jour
+             * Format: date
+             * @example 2026-11-26
+             */
+            jour: string;
+            /**
+             * Litres
+             * @description Le plein de reference, fixe par la spec. Unite de comparaison, pas une moyenne francaise mesuree.
+             * @example 50
+             */
+            litres: number;
+            /**
+             * Prix Autoroute Eur L
+             * @example 2.089
+             */
+            prix_autoroute_eur_l: number;
+            /**
+             * Prix Route Eur L
+             * @example 1.862
+             */
+            prix_route_eur_l: number;
+            /**
+             * Stations Autoroute
+             * @example 412
+             */
+            stations_autoroute: number;
+            /**
+             * Stations Route
+             * @example 9020
+             */
+            stations_route: number;
+            /**
+             * Surcout Eur
+             * @description ecart x litres.
+             * @example 11.35
+             */
+            surcout_eur: number;
+        };
         /** @enum {string} */
         Tri: "prix" | "distance";
         /** ValidationError */
@@ -1164,6 +1467,36 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    anecdotes_du_jour_v1_anecdotes_du_jour_get: {
+        parameters: {
+            query?: {
+                /** @description Code du carburant. */
+                carburant?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReponseAnecdotes"];
+                };
+            };
+            /** @description Carburant inconnu. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     empreinte_v1_empreinte_get: {
         parameters: {
             query: {

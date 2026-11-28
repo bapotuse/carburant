@@ -1,6 +1,41 @@
 {
   "components": {
     "schemas": {
+      "AnecdoteIndisponible": {
+        "description": "Une anecdote que les données du jour ne permettent pas de calculer.",
+        "properties": {
+          "cle": {
+            "examples": [
+              "jour_semaine_moins_cher"
+            ],
+            "title": "Cle",
+            "type": "string"
+          },
+          "mesure": {
+            "description": "Ce qu'on a reellement, pour que le seuil soit verifiable.",
+            "examples": [
+              "1 jour de la semaine couvert, 0 semaine pour le moins bien pourvu"
+            ],
+            "title": "Mesure",
+            "type": "string"
+          },
+          "raison": {
+            "description": "Le seuil, en clair.",
+            "examples": [
+              "Il faut 52 semaines d'historique pour chacun des sept jours."
+            ],
+            "title": "Raison",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cle",
+          "raison",
+          "mesure"
+        ],
+        "title": "AnecdoteIndisponible",
+        "type": "object"
+      },
       "Candidat": {
         "description": "Un lieu propose par le geocodeur.",
         "properties": {
@@ -113,6 +148,178 @@
           "maj"
         ],
         "title": "ChangementPrix",
+        "type": "object"
+      },
+      "DepartementMoinsCher": {
+        "description": "Le département le moins cher sur les sept derniers jours calculés.",
+        "properties": {
+          "code_departement": {
+            "examples": [
+              "46"
+            ],
+            "title": "Code Departement",
+            "type": "string"
+          },
+          "departements_compares": {
+            "description": "Departements ayant atteint les deux seuils, donc reellement compares.",
+            "examples": [
+              96
+            ],
+            "title": "Departements Compares",
+            "type": "integer"
+          },
+          "ecart_au_national_eur_l": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Negatif : c'est ce qui fait de ce departement le moins cher.",
+            "examples": [
+              -0.05
+            ],
+            "title": "Ecart Au National Eur L"
+          },
+          "jour_fin": {
+            "description": "Dernier jour de la fenetre. La fenetre est calee sur le dernier agregat calcule, pas sur aujourd'hui : si la collecte date d'hier, une fenetre calee sur aujourd'hui perdrait un jour pour rien.",
+            "examples": [
+              "2026-11-26"
+            ],
+            "format": "date",
+            "title": "Jour Fin",
+            "type": "string"
+          },
+          "jours": {
+            "description": "Jours d'agregat trouves sur les sept.",
+            "examples": [
+              7
+            ],
+            "title": "Jours",
+            "type": "integer"
+          },
+          "prix_median_eur_l": {
+            "description": "Moyenne des medianes journalieres du departement sur la fenetre.",
+            "examples": [
+              1.812
+            ],
+            "title": "Prix Median Eur L",
+            "type": "number"
+          },
+          "prix_national_eur_l": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              1.862
+            ],
+            "title": "Prix National Eur L"
+          },
+          "stations": {
+            "description": "Le plus petit effectif journalier du departement sur la fenetre.",
+            "examples": [
+              34
+            ],
+            "title": "Stations",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code_departement",
+          "prix_median_eur_l",
+          "stations",
+          "jours",
+          "jour_fin",
+          "departements_compares"
+        ],
+        "title": "DepartementMoinsCher",
+        "type": "object"
+      },
+      "EcartDuJour": {
+        "description": "L'écart entre la station la moins chère et la plus chère de France.",
+        "properties": {
+          "ecart_eur_l": {
+            "description": "La difference entre les deux. C'est le chiffre de l'anecdote.",
+            "examples": [
+              0.75
+            ],
+            "title": "Ecart Eur L",
+            "type": "number"
+          },
+          "moins_chere": {
+            "$ref": "#/components/schemas/StationBorne"
+          },
+          "plus_chere": {
+            "$ref": "#/components/schemas/StationBorne"
+          },
+          "prix_max_eur_l": {
+            "examples": [
+              2.299
+            ],
+            "title": "Prix Max Eur L",
+            "type": "number"
+          },
+          "prix_min_eur_l": {
+            "examples": [
+              1.549
+            ],
+            "title": "Prix Min Eur L",
+            "type": "number"
+          },
+          "stations": {
+            "description": "Stations retenues : prix frais ou recent, hors rupture et hors prix atypique.",
+            "examples": [
+              9432
+            ],
+            "title": "Stations",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stations",
+          "prix_min_eur_l",
+          "prix_max_eur_l",
+          "ecart_eur_l",
+          "moins_chere",
+          "plus_chere"
+        ],
+        "title": "EcartDuJour",
+        "type": "object"
+      },
+      "EcartJourSemaine": {
+        "description": "L'écart moyen d'un jour de la semaine à sa propre semaine.",
+        "properties": {
+          "ecart_eur_l": {
+            "description": "Negatif : ce jour-la est moins cher que la moyenne de sa semaine.",
+            "examples": [
+              -0.0043
+            ],
+            "title": "Ecart Eur L",
+            "type": "number"
+          },
+          "jour_semaine": {
+            "description": "Norme ISO-8601 : 1 = lundi, 7 = dimanche.",
+            "examples": [
+              2
+            ],
+            "maximum": 7.0,
+            "minimum": 1.0,
+            "title": "Jour Semaine",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "jour_semaine",
+          "ecart_eur_l"
+        ],
+        "title": "EcartJourSemaine",
         "type": "object"
       },
       "Empreinte": {
@@ -579,6 +786,58 @@
         "title": "Hypotheses",
         "type": "object"
       },
+      "JourSemaineMoinsCher": {
+        "description": "Le jour de la semaine historiquement le moins cher.",
+        "properties": {
+          "classement": {
+            "description": "Les sept jours, du moins cher au plus cher.",
+            "items": {
+              "$ref": "#/components/schemas/EcartJourSemaine"
+            },
+            "title": "Classement",
+            "type": "array"
+          },
+          "ecart_eur_l": {
+            "examples": [
+              -0.0043
+            ],
+            "title": "Ecart Eur L",
+            "type": "number"
+          },
+          "jour_semaine": {
+            "description": "Norme ISO-8601 : 1 = lundi, 7 = dimanche.",
+            "examples": [
+              2
+            ],
+            "maximum": 7.0,
+            "minimum": 1.0,
+            "title": "Jour Semaine",
+            "type": "integer"
+          },
+          "methode": {
+            "description": "Comment la tendance de fond a ete retiree. Sans ce retrait, le resultat mesurerait la hausse des prix sur seize ans.",
+            "title": "Methode",
+            "type": "string"
+          },
+          "semaines": {
+            "description": "Semaines d'observation pour le jour le moins bien pourvu.",
+            "examples": [
+              921
+            ],
+            "title": "Semaines",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "jour_semaine",
+          "ecart_eur_l",
+          "semaines",
+          "classement",
+          "methode"
+        ],
+        "title": "JourSemaineMoinsCher",
+        "type": "object"
+      },
       "PointSerie": {
         "description": "Un jour d'une serie de prix.",
         "properties": {
@@ -720,6 +979,81 @@
           "carburant"
         ],
         "title": "PrixCarburant",
+        "type": "object"
+      },
+      "ReponseAnecdotes": {
+        "description": "Les anecdotes calculables aujourd'hui, et celles qui ne le sont pas.",
+        "properties": {
+          "calcule_le": {
+            "description": "Instant du calcul. Une anecdote s'affiche toujours avec sa date.",
+            "examples": [
+              "2026-11-26T19:05:00Z"
+            ],
+            "format": "date-time",
+            "title": "Calcule Le",
+            "type": "string"
+          },
+          "carburant": {
+            "examples": [
+              "gazole"
+            ],
+            "title": "Carburant",
+            "type": "string"
+          },
+          "departement_moins_cher": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DepartementMoinsCher"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ecart_du_jour": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EcartDuJour"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "indisponibles": {
+            "description": "Les anecdotes sous leur seuil, avec leur raison. Elles sont declarees plutot que passees sous silence : un seuil non atteint est une information, pas un oubli.",
+            "items": {
+              "$ref": "#/components/schemas/AnecdoteIndisponible"
+            },
+            "title": "Indisponibles",
+            "type": "array"
+          },
+          "jour_semaine_moins_cher": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JourSemaineMoinsCher"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "surcout_autoroute": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SurcoutAutoroute"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "carburant",
+          "calcule_le"
+        ],
+        "title": "ReponseAnecdotes",
         "type": "object"
       },
       "ReponseComparaison": {
@@ -1334,6 +1668,97 @@
         "title": "Source",
         "type": "object"
       },
+      "StationBorne": {
+        "description": "Une des deux bornes de l'écart du jour.",
+        "properties": {
+          "autoroute": {
+            "default": false,
+            "description": "Une borne sur autoroute n'a pas la meme signification qu'une borne en ville.",
+            "examples": [
+              false
+            ],
+            "title": "Autoroute",
+            "type": "boolean"
+          },
+          "code_departement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "13"
+            ],
+            "title": "Code Departement"
+          },
+          "cp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "13008"
+            ],
+            "title": "Cp"
+          },
+          "maj": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "2026-11-26T08:12:00Z"
+            ],
+            "title": "Maj"
+          },
+          "prix_eur_l": {
+            "examples": [
+              1.699
+            ],
+            "title": "Prix Eur L",
+            "type": "number"
+          },
+          "station_id": {
+            "examples": [
+              13008003
+            ],
+            "title": "Station Id",
+            "type": "integer"
+          },
+          "ville": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "Marseille"
+            ],
+            "title": "Ville"
+          }
+        },
+        "required": [
+          "station_id",
+          "prix_eur_l"
+        ],
+        "title": "StationBorne",
+        "type": "object"
+      },
       "StationEvaluee": {
         "description": "Une station atteignable, avec le detail de son cout.",
         "properties": {
@@ -1650,6 +2075,82 @@
         "title": "StationProche",
         "type": "object"
       },
+      "SurcoutAutoroute": {
+        "description": "Le surcoût d'un plein de 50 L pris sur autoroute.",
+        "properties": {
+          "ecart_eur_l": {
+            "examples": [
+              0.227
+            ],
+            "title": "Ecart Eur L",
+            "type": "number"
+          },
+          "jour": {
+            "examples": [
+              "2026-11-26"
+            ],
+            "format": "date",
+            "title": "Jour",
+            "type": "string"
+          },
+          "litres": {
+            "description": "Le plein de reference, fixe par la spec. Unite de comparaison, pas une moyenne francaise mesuree.",
+            "examples": [
+              50
+            ],
+            "title": "Litres",
+            "type": "integer"
+          },
+          "prix_autoroute_eur_l": {
+            "examples": [
+              2.089
+            ],
+            "title": "Prix Autoroute Eur L",
+            "type": "number"
+          },
+          "prix_route_eur_l": {
+            "examples": [
+              1.862
+            ],
+            "title": "Prix Route Eur L",
+            "type": "number"
+          },
+          "stations_autoroute": {
+            "examples": [
+              412
+            ],
+            "title": "Stations Autoroute",
+            "type": "integer"
+          },
+          "stations_route": {
+            "examples": [
+              9020
+            ],
+            "title": "Stations Route",
+            "type": "integer"
+          },
+          "surcout_eur": {
+            "description": "ecart x litres.",
+            "examples": [
+              11.35
+            ],
+            "title": "Surcout Eur",
+            "type": "number"
+          }
+        },
+        "required": [
+          "prix_autoroute_eur_l",
+          "prix_route_eur_l",
+          "ecart_eur_l",
+          "litres",
+          "surcout_eur",
+          "stations_autoroute",
+          "stations_route",
+          "jour"
+        ],
+        "title": "SurcoutAutoroute",
+        "type": "object"
+      },
       "Tri": {
         "enum": [
           "prix",
@@ -1706,6 +2207,48 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/anecdotes/du-jour": {
+      "get": {
+        "description": "Quatre anecdotes calculees depuis la base, pour un carburant :\n\n1. **ecart_du_jour** — l'ecart entre la station la moins chere et la plus chere de France aujourd'hui, les deux stations nommees ;\n2. **departement_moins_cher** — sur les sept derniers jours calcules ;\n3. **surcout_autoroute** — ce que coute en plus un plein de 50 L sur autoroute ;\n4. **jour_semaine_moins_cher** — le jour de la semaine historiquement le moins cher, **tendance de fond retiree** : le prix est passe de 1,07 EUR a 1,86 EUR en seize ans, et moyenner les prix par jour de la semaine mesurerait cette hausse, pas l'effet du jour.\n\n**Chaque anecdote a un seuil minimal de donnees.** Sous son seuil, elle n'est pas approximee : elle apparait dans `indisponibles` avec sa raison et la mesure obtenue. Sur une base fraichement amorcee, les anecdotes historiques sont donc absentes, et elles le disent.",
+        "operationId": "anecdotes_du_jour_v1_anecdotes_du_jour_get",
+        "parameters": [
+          {
+            "description": "Code du carburant.",
+            "in": "query",
+            "name": "carburant",
+            "required": false,
+            "schema": {
+              "default": "gazole",
+              "description": "Code du carburant.",
+              "examples": [
+                "gazole"
+              ],
+              "title": "Carburant",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseAnecdotes"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Carburant inconnu."
+          }
+        },
+        "summary": "Les chiffres du jour",
+        "tags": [
+          "anecdotes"
+        ]
+      }
+    },
     "/v1/empreinte": {
       "get": {
         "description": "Multiplie un volume par le facteur d'emission du carburant, tel que publie par la Base Carbone de l'ADEME.\n\n**Le facteur est rendu avec sa provenance complete** : libelle exact de l'ADEME, perimetre, periode de validite, version du jeu et URL. Un chiffre d'empreinte carbone sans sa source ne vaut rien.",
