@@ -320,3 +320,47 @@ jobs:
         env:
           SITE: ${{ vars.CARBURANT_SITE_URL || env.SITE_PAR_DEFAUT }}
         run: uv run python infra/scripts/verifier-mcp-distant.py "${SITE%/}/mcp"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+
+      - name: Smoke test avec MCP Inspector, en mode CLI
+        # Un second client, independant du notre et ecrit par les auteurs du
+        # protocole. Il a deja trouve un defaut que nos tests ne voyaient pas : il
+        # passe `zone=13` en **entier** la ou tous nos tests passaient des chaines, et
+        # le schema repondait « Input should be a valid string ». C'est exactement ce
+        # qu'on attend d'un outil tiers -- il n'a pas nos habitudes.
+        env:
+          SITE: ${{ vars.CARBURANT_SITE_URL || env.SITE_PAR_DEFAUT }}
+        run: |
+          set -eu
+          url="${SITE%/}/mcp"
+          npx --yes @modelcontextprotocol/inspector --cli "$url" --method tools/list \
+            > /tmp/outils.json
+          python - <<'FIN'
+          import json, sys
+
+          attendus = {
+              "comparer_carburants",
+              "empreinte_carbone_plein",
+              "meilleure_station_avec_autonomie",
+              "prix_station",
+              "tendance_prix",
+              "trouver_station_moins_chere",
+          }
+          with open("/tmp/outils.json", encoding="utf-8") as fichier:
+              outils = json.load(fichier)["tools"]
+          noms = {outil["name"] for outil in outils}
+          if noms != attendus:
+              sys.exit(f"outils inattendus : {sorted(noms ^ attendus)}")
+          for outil in outils:
+              if not outil.get("annotations", {}).get("readOnlyHint"):
+                  sys.exit(f"{outil['name']} n est pas annote en lecture seule")
+              if "Choisis cet outil" not in (outil.get("description") or ""):
+                  sys.exit(f"{outil['name']} ne dit pas quand le choisir")
+          print(f"{len(noms)} outils, tous en lecture seule et tous documentes.")
+          FIN
+          npx --yes @modelcontextprotocol/inspector --cli "$url" \
+            --method tools/call --tool-name tendance_prix \
+            --tool-arg zone=13 --tool-arg carburant=diesel --tool-arg 'periode=ce mois-ci'

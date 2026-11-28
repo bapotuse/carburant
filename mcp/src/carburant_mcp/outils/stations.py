@@ -323,10 +323,16 @@ def enregistrer(serveur: MCPServer[Any], client: ClientCarburant) -> None:
     )
     async def prix_station(
         station: Annotated[
-            str, Field(description="Identifiant officiel (chiffres) ou adresse de la station.")
+            # `str | int` et non `str` : un client qui passe un identifiant ecrit
+            # naturellement `13008003` sans guillemets, et JSON en fait un entier. Un
+            # schema strict repondait alors « Input should be a valid string », ce qui
+            # est une erreur de notre cote deguisee en erreur de l'appelant. Trouve en
+            # interrogeant le serveur avec MCP Inspector, pas en relisant le code.
+            str | int,
+            Field(description="Identifiant officiel (chiffres) ou adresse de la station."),
         ],
     ) -> ReponsePrixStation:
-        texte_station = station.strip()
+        texte_station = str(station).strip()
         distance: float | None = None
         with relayer():
             if texte_station.isdigit():

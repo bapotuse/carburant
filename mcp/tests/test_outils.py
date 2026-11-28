@@ -501,3 +501,58 @@ async def test_la_comparaison_sans_lieu_ne_parle_que_de_co2(
     assert structure["lieu"] is None
     assert all(entree.get("prix_le_moins_cher_eur_l") is None for entree in structure["carburants"])
     assert "CO2 seulement" in _texte(resultat)
+
+
+# ------------------------------------------------- les entiers passes sans guillemets
+async def test_un_identifiant_de_station_passe_en_nombre_est_accepte(
+    api: Fabrique, ouvrir: Session
+) -> None:
+    """Un client ecrit `13008003` sans guillemets, et JSON en fait un entier.
+
+    Un schema strict repondait « Input should be a valid string », ce qui est une
+    erreur de notre cote deguisee en erreur de l'appelant. Trouve en interrogeant le
+    serveur avec MCP Inspector en mode CLI -- pas par relecture, et pas par les tests
+    en memoire, qui passaient tous des chaines.
+    """
+    fiche = {
+        "id": 13008003,
+        "enseigne": "TotalEnergies",
+        "adresse": "32 BOULEVARD SCHLOESING",
+        "ville": "Marseille",
+        "cp": "13008",
+        "autoroute": False,
+        "latitude": 43.272,
+        "longitude": 5.393,
+        "active": True,
+        "premiere_vue": "2026-11-23T10:00:00Z",
+        "derniere_vue": "2026-11-28T10:00:00Z",
+        "services": [],
+        "horaires": None,
+        "prix": [
+            {
+                "carburant": "gazole",
+                "prix_eur_l": 1.879,
+                "maj": "2026-11-28T06:00:00Z",
+                "fraicheur": "frais",
+                "rupture": None,
+            }
+        ],
+    }
+    client = api({"/v1/stations/13008003": fiche})
+    async with ouvrir(client) as cliente:
+        resultat = await cliente.call_tool("prix_station", {"station": 13008003})
+    assert not resultat.is_error, _texte(resultat)
+    assert _structure(resultat)["id"] == 13008003
+
+
+async def test_un_code_de_departement_passe_en_nombre_est_accepte(
+    api: Fabrique, ouvrir: Session, charges: Charges
+) -> None:
+    """Meme piege pour `zone` : « 13 » est un code, mais il s'ecrit comme un nombre."""
+    client = api({"/v1/tendances": charges["tendances"]})
+    async with ouvrir(client) as cliente:
+        resultat = await cliente.call_tool(
+            "tendance_prix", {"zone": 13, "carburant": "diesel", "periode": "ce mois-ci"}
+        )
+    assert not resultat.is_error, _texte(resultat)
+    assert _structure(resultat)["zone"] == "departement 13"

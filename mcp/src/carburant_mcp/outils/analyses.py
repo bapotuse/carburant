@@ -160,7 +160,10 @@ def enregistrer(serveur: MCPServer[Any], client: ClientCarburant) -> None:
     )
     async def tendance_prix(
         zone: Annotated[
-            str, Field(description="« France », un code de departement, ou un lieu.")
+            # `str | int` : un code de departement s'ecrit « 13 » et un client le
+            # passe volontiers en nombre. Voir la note de `prix_station`.
+            str | int,
+            Field(description="« France », un code de departement, ou un lieu."),
         ] = "France",
         carburant: Annotated[str, Field(description="Carburant, synonymes acceptes.")] = "gazole",
         periode: Annotated[
@@ -170,7 +173,7 @@ def enregistrer(serveur: MCPServer[Any], client: ClientCarburant) -> None:
         with relayer():
             code = normaliser(carburant)
             jours = _jours(periode)
-            texte_zone = zone.strip()
+            texte_zone = str(zone).strip()
             departement: str | None = None
             nom_zone = "France"
             if texte_zone and texte_zone.lower() not in ("france", "nationale", "national"):
@@ -225,9 +228,12 @@ def enregistrer(serveur: MCPServer[Any], client: ClientCarburant) -> None:
         )
         if len(points) < jours * 0.5:
             texte += (
-                f" Attention, {pluriel(len(points), 'jour')} seulement sur {jours} "
-                "sont couverts : la periode demandee depasse l'historique disponible "
-                "pour cette zone."
+                # Tournure sans verbe apres le nombre : « 1 jour sont couverts » et
+                # « 2 jour est couvert » sont tous deux faux, et accorder un verbe en
+                # plus du nom pour une phrase d'avertissement ne vaut pas la peine.
+                " Attention, la periode demandee depasse l'historique disponible pour "
+                f"cette zone : {pluriel(len(points), 'jour')} couvert"
+                f"{'s' if len(points) > 1 else ''} sur {jours}."
             )
 
         return ReponseTendance(
