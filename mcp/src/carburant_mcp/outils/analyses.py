@@ -315,7 +315,8 @@ def enregistrer(serveur: MCPServer[Any], client: ClientCarburant) -> None:
             "**Choisis cet outil** pour « quel carburant est le plus economique ? », "
             "« essence ou diesel ? », « et le GPL, ca vaut le coup ? ».\n\n"
             "Sans `lieu`, la comparaison ne porte que sur le CO2. Avec un lieu, elle "
-            "ajoute le prix de chaque carburant dans un rayon de 10 km — et un "
+            "ajoute le prix le plus bas de chaque carburant parmi les **cent stations "
+            "les plus proches**, dans un rayon de 10 km — et un "
             "carburant peut manquer. Mesure sur les 9 825 stations actives : le gazole "
             "a un prix dans 97 % d'entre elles, le SP98 et l'E10 dans 78 %, l'E85 dans "
             "40 %, le SP95 dans 29 % et le GPL dans 15 %. Un carburant absent de la "
@@ -346,8 +347,15 @@ def enregistrer(serveur: MCPServer[Any], client: ClientCarburant) -> None:
                     lat=place.latitude,
                     lon=place.longitude,
                     rayon_km=10,
-                    tri="prix",
-                    limite=200,
+                    # Les cent stations les plus proches, et pas les moins cheres :
+                    # sans filtre de carburant, « le moins cher » ne veut rien dire
+                    # a l'echelle d'une station qui en vend six.
+                    tri="distance",
+                    # Cent, parce que l'API refuse au-dela -- elle repondait
+                    # « limite : Input should be less than or equal to 100 » et
+                    # l'outil echouait entierement. Trouve par l'essai de bout en
+                    # bout contre la production, des sa premiere execution.
+                    limite=100,
                 )
                 for station in autour.get("stations", []):
                     for prix in station.get("prix", []):

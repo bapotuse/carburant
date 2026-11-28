@@ -137,6 +137,34 @@ COMPARAISON: dict[str, Any] = {
 }
 
 
+# Les bornes que l'API impose a ses parametres, recopiees de l'OpenAPI. Le faux
+# client les fait respecter : sans cela, un outil peut demander `limite=200`, passer
+# tous les tests, puis echouer en production avec « Input should be less than or
+# equal to 100 ». C'est exactement ce qui est arrive a `comparer_carburants`, et
+# c'est l'essai de bout en bout qui l'a vu -- ces tests ne pouvaient pas.
+BORNES: dict[str, tuple[float, float]] = {
+    "limite": (1, 100),
+    "rayon_km": (0.1, 50),
+    "jours": (1, 1825),
+    "litres": (0.1, 500),
+    "autonomie_km": (0.1, 1500),
+}
+
+
+def _verifier_les_bornes(requete: httpx.Request) -> None:
+    """Refuse comme l'API refuserait : hors bornes, c'est un 422."""
+    for nom, (bas, haut) in BORNES.items():
+        brut = requete.url.params.get(nom)
+        if brut is None:
+            continue
+        valeur = float(brut)
+        if not bas <= valeur <= haut:
+            raise AssertionError(
+                f"{requete.url.path} demande {nom}={brut}, hors des bornes "
+                f"[{bas}, {haut}] de l'API. En production, elle aurait repondu 422."
+            )
+
+
 @pytest.fixture
 def api() -> Callable[[dict[str, dict[str, Any]]], httpx.AsyncClient]:
     """Fabrique un client httpx qui répond depuis une table chemin → charge.
@@ -153,6 +181,7 @@ def api() -> Callable[[dict[str, dict[str, Any]]], httpx.AsyncClient]:
         def repondre(requete: httpx.Request) -> httpx.Response:
             chemin = requete.url.path
             appels.append(chemin)
+            _verifier_les_bornes(requete)
             if chemin in table:
                 return httpx.Response(200, json=table[chemin])
             raise AssertionError(
