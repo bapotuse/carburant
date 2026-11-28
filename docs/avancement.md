@@ -1,54 +1,63 @@
 # Avancement
 
 ## Prochaine action
-**Lancer le workflow « Performance de l'API » et lire son resultat.** C'est le dernier
-critere de sortie du Jalon 3 : p95 de `/v1/stations/proches` sous 300 ms **sur le
-VPS**, mesure depuis l'interieur du conteneur de l'API. Tout le reste du jalon est
-fait et verifie. Si une route depasse son budget, la corriger avant d'ouvrir le
-Jalon 4.
+**Finir le Jalon 4.** Le serveur MCP tourne et est deploye ; il reste le smoke test
+MCP Inspector en mode CLI, le README avec cinq conversations reelles, et un essai de
+bout en bout contre la production. La validation du nom du package ne bloque rien :
+`prix-carburant-mcp` s'applique par defaut.
 
-Ensuite : le **Jalon 4, le serveur MCP**, qui commence par une validation de gout (le
-nom du package) et une action de Baptiste (un compte PyPI). Les deux peuvent attendre :
-le serveur s'installe aussi depuis le depot git.
+Puis le **Jalon 5, le site complet**, qui commence par deux validations de gout (les
+maquettes mobiles de l'accueil et de la carte, puis les objets 3D).
 
 Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seuils, et
 `docs/decisions.md` avant de refaire un choix deja tranche.
 
-**L'historique complet est en base, sur le VPS**, charge le 26/11/2026 :
+**Les Jalons 2 et 3 sont termines.** L'historique complet est en base sur le VPS :
 **64 062 124 changements de prix** du 01/01/2007 au 26/11/2026, **242 partitions**,
 partition DEFAULT a **0 ligne**, **3 836 872 lignes d'agregat** sur **7 299 jours**,
-base a **8 477 Mo**, huit controles qualite au vert. 3 h 20 de bout en bout.
-Le compte de lignes estime au cadrage etait juste a 0,1 % pres ; la duree etait fausse
-d'un facteur 2,7, parce qu'elle avait ete chronometree sur la machine de developpement
-et non sur l'Ampere a CPU partage du VPS. **Une duree mesuree ici ne se transporte pas
-sur le VPS** : regle a retenir.
+base a **8 477 Mo**, neuf controles qualite au vert. 3 h 20 de bout en bout.
+L'API est complete : onze routes, p95 de `/v1/stations/proches` a **33,5 ms** sur le
+VPS pour un budget de 300 ms.
 
-**L'amorcage a casse deux choses, et c'est la partie interessante.**
+**L'amorcage a casse trois choses, et c'est la partie interessante.** Les trois
+auraient ete invisibles sans l'avoir fait tourner en vrai.
 
 1. **Le site est tombe.** `/v1/meta` faisait un `count(*) FROM marts.fact_prix`,
-   inoffensif sur 33 000 lignes au Jalon 1, mortel sur 64 millions reparties sur
-   242 partitions. Or `/v1/meta` est la sonde de vivacite du conteneur, avec quatre
-   secondes de budget : la sonde a echoue, Docker a declare l'API malade,
-   `docker compose up --wait` a echoue et le conteneur web n'a pas demarre. Un
-   chargement de donnees reussi a mis le site hors ligne, par une requete que
-   personne n'avait touchee. Remplace par la somme de `pg_class.reltuples` sur les
-   partitions, et le champ s'appelle maintenant `prix_connus_environ` pour que
-   personne ne le presente comme exact. **Un test verrouille la forme du plan**, pas
-   sa vitesse : sur la base de test, compter trente lignes est instantane, et c'est
-   exactement pour cela que le defaut a survecu quatre jours.
-2. **Les recherches traversaient vingt ans.** Trouve en lisant le plan reel, pas en
-   attendant la panne : `/v1/stations/proches` faisait un parcours d'index par station
-   candidate **et par partition**, puis triait vingt ans de changements de prix pour
-   en garder un. Corrige par une borne basse sur `maj`, placee un jour avant le seuil
-   de peremption -- donc sans changer aucun resultat, puisque les recherches ecartent
-   deja les prix perimes. Elagage verifie : douze sous-plans retires sur seize
-   partitions locales.
+   inoffensif sur 33 000 lignes au Jalon 1, mortel sur 64 millions. Or `/v1/meta` est
+   la sonde de vivacite du conteneur, avec quatre secondes de budget. Chronometre
+   depuis : **3,96 s** sur une machine au repos -- donc au-dela des quatre secondes des
+   que le VPS travaille, c'est-a-dire pendant un deploiement. Remplace par la somme de
+   `pg_class.reltuples`, **12,7 ms**, et le champ s'appelle `prix_connus_environ` pour
+   que personne ne le presente comme exact.
+2. **Les recherches traversaient vingt ans.** Trouve en lisant le plan d'execution, pas
+   en attendant la panne. Corrige par une borne basse sur `maj`, placee un jour avant
+   le seuil de peremption -- donc sans changer aucun resultat. Meme correction appliquee
+   a `marts.prix_courant`, qui faisait passer `/v1/anecdotes/du-jour` de **28,7 s avec
+   dix-neuf delais depasses sur vingt** a **1,1 s sans aucun echec**, et les controles
+   qualite de huit minutes et demie a moins d'une minute.
+3. **Des agregats portaient des jours a venir.** L'amorcage demandait « l'annee 2026 »
+   en novembre, et le calcul en masse etendait le dernier prix connu jusqu'au
+   25 decembre. L'anecdote du departement le moins cher de la semaine portait donc sur
+   sept jours a venir : sept copies du meme instantane. Trouve en lisant la reponse en
+   production une fois qu'elle etait assez rapide pour etre lisible. La base se repare
+   maintenant d'elle-meme a chaque collecte, et un neuvieme controle qualite pose la
+   question -- aucun ne la posait pour les agregats.
 
-Le deploiement dit desormais **pourquoi** un conteneur est malade : etat, journal de
-la sonde et dernieres lignes des quatre conteneurs. Jusqu'ici il s'arretait sur
-« container carburant_api is unhealthy » et il fallait deviner.
+**Deux de mes propres tests passaient pour de mauvaises raisons** et ont ete reecrits
+sur la vraie propriete : celui du dossier `mcp/` comparait une chaine vide et passait
+**grace** au defaut qu'il surveillait ; celui de la fenetre glissante attendait le
+retour du budget a la bascule exacte, ou la fenetre precedente compte encore
+entierement.
 
-**Le Jalon 1 est en ligne** : <https://carburant.144-24-195-97.sslip.io>, en HTTPS.
+**Et l'anecdote historique fonctionne, sur vingt ans de vraies donnees** : le
+**dimanche** est le jour le moins cher, de **0,065 centime par litre** sur
+1 041 semaines -- trois centimes sur un plein de 50 litres. La bonne reponse a « quel
+jour faire le plein ? » est donc « n'importe lequel ». C'est une anecdote plus honnete
+que celle qu'une moyenne brute aurait fabriquee : sans retrait de la tendance de fond,
+le calcul designait un gagnant avec 0,4 centime d'ecart, tire de la seule hausse des
+prix sur la periode.
+
+**Le site est en ligne** : <https://carburant.144-24-195-97.sslip.io>, en HTTPS.
 
 ## En attente de Baptiste
 
@@ -167,7 +176,8 @@ une relance à l'identique.
 - [x] « Meilleure station » avec tests unitaires, de propriétés et d'intégration — 26/11/2026
 - [x] Cache, rate limiting, CORS, erreurs problem+json — 28/11/2026, fenêtre glissante
       à 120 requêtes par minute et par adresse
-- [ ] p95 mesuré sur le VPS, après l'amorçage — workflow `performance.yml`, à lancer
+- [x] p95 mesuré sur le VPS, après l'amorçage — 28/11/2026, **33,5 ms** pour un budget
+      de 300 ms, sur les 64 millions de lignes ; workflow `performance.yml`
 
 Les routes : `/v1/sante`, `/v1/meta`, `/v1/geocode`, `/v1/stations/proches`,
 `/v1/stations/meilleure`, `/v1/stations/{id}`, `/v1/stations/{id}/historique`,
@@ -175,11 +185,37 @@ Les routes : `/v1/sante`, `/v1/meta`, `/v1/geocode`, `/v1/stations/proches`,
 `/v1/anecdotes/du-jour`.
 
 Sortie : `/docs` lisible et complet ; tests verts ; p95 < 300 ms sur le VPS pour `/stations/proches`.
+**Atteinte le 28/11/2026.** Contrat audité route par route : onze routes, toutes avec
+résumé, description et paramètres documentés, 34 schémas, aucun manque — et deux trous
+comblés au passage (le 429 n'était déclaré nulle part, le 503 des routes d'empreinte non
+plus). Temps mesurés **dans le conteneur de l'API sur le VPS**, 20 tours sur 10 villes :
+
+| Route | médiane | p95 |
+|---|---|---|
+| `/v1/stations/proches` | 25,3 ms | **33,5 ms** |
+| `/v1/stations/meilleure` | 11,4 ms | 42,1 ms |
+| `/v1/stations/{id}` | 21,3 ms | 26,3 ms |
+| `/v1/stations/{id}/historique` | 23,6 ms | 28,5 ms |
+| `/v1/tendances` | 7,9 ms | 14,8 ms |
+| `/v1/meta` | 4,1 ms | 6,6 ms |
+| `/v1/sante` | 2,6 ms | 3,5 ms |
+| `/v1/anecdotes/du-jour` | 1 118 ms | 1 287 ms |
+
+Les anecdotes restent la route lente : **1,1 s**, contre 28,7 s avant correction. Elle
+est en cache un quart d'heure, ce qui suffit pour l'instant, mais l'effet du jour de la
+semaine se recalcule sur 7 299 jours à chaque appel. À déplacer dans une table calculée
+par l'ETL si l'accueil l'affiche côté serveur (Jalon 5).
+
+À travers Caddy depuis un runner GitHub : 158,8 ms de médiane pour `/stations/proches`,
+liaison internet comprise. Ce chiffre-là n'est pas une propriété du code.
 
 ### J4 — Serveur MCP
-- [ ] [VALIDATION] Nom du package
-- [ ] Package, tools, transport stdio, transport Streamable HTTP déployé
-- [ ] Tests en mémoire et smoke test MCP Inspector en mode CLI
+- [ ] 🎨 **[VALIDATION]** Nom du package — six noms vérifiés libres sur PyPI, question
+      posée dans le bilan ; `prix-carburant-mcp` s'applique par défaut
+- [x] Package, tools, transport stdio, transport Streamable HTTP déployé — 28/11/2026,
+      six outils, les deux transports, route `/mcp` derrière Caddy
+- [x] Tests en mémoire — 28/11/2026, 21 tests passant par le vrai protocole
+- [ ] Smoke test MCP Inspector en mode CLI
 - [ ] README avec 5 conversations réelles
 
 Sortie : `uvx …` fonctionne depuis une machine propre ; la question du Prado obtient une réponse juste via un vrai client MCP, en local et en distant.
@@ -205,6 +241,72 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-28 (suite) — Jalon 3 termine, serveur MCP, et trois pannes causees par le
+  succes de l'amorcage.**
+  **Le Jalon 3 est clos** : onze routes, contrat audite route par route (34 schemas,
+  aucun manque), et le critere de sortie mesure **sur le VPS, dans le conteneur de
+  l'API** -- p95 de `/v1/stations/proches` a **33,5 ms** pour un budget de 300 ms, sur
+  64 millions de lignes. Deux trous du contrat combles au passage : le 429 n'etait
+  declare nulle part, et la liste des exemptions est **lue** dans le middleware plutot
+  que recopiee, pour que `/v1/sante` n'annonce pas un refus qui ne peut pas arriver.
+  **`/v1/anecdotes/du-jour`**, avec les quatre anecdotes de la spec et leurs seuils.
+  Sous son seuil, une anecdote n'est pas approximee : elle sort dans `indisponibles`
+  avec sa raison et sa mesure. La quatrieme -- le jour de la semaine le moins cher --
+  demande de **retirer la tendance de fond** : le gazole est passe de 1,07 EUR a
+  1,86 EUR en vingt ans, et une moyenne brute mesurerait cette hausse. Verifie en
+  remettant la version naive : elle designe un gagnant avec 0,4 centime d'ecart tire de
+  la seule tendance. Resultat reel sur vingt ans : le dimanche, de 0,065 centime par
+  litre sur 1 041 semaines. Trois centimes sur un plein.
+  **La limitation de debit**, fenetre glissante approchee a 120 requetes par minute et
+  par adresse. Une fenetre fixe laisserait passer le double a cheval sur sa frontiere ;
+  un test le verifie en injectant le temps. Memoire bornee a 20 000 adresses, sans quoi
+  des adresses tournantes feraient du limiteur lui-meme le vecteur de deni de service.
+  **Le serveur MCP**, ses six outils, ses deux transports, et sa route `/mcp` derriere
+  Caddy. Vingt-et-un tests passent par le **vrai protocole** dans une session en
+  memoire, avec des reponses d'API reellement capturees : une forme devinee se met
+  d'accord avec le code qui la consomme et ne prouve rien. Le transport HTTP a tourne
+  pour de vrai, client MCP officiel connecte dessus, protocole 2025-11-25 negocie.
+  Quatre details que ma memoire du SDK aurait fait rater : `FastMCP` s'appelle
+  `MCPServer`, `ToolAnnotations` et les resultats d'appel sont en `snake_case`, et
+  seules les `ToolError` transmettent leur message -- nos messages ecrits pour un modele
+  auraient ete remplaces par « Error executing tool ». Un cinquieme, trouve en lisant
+  `transport_security` : la protection contre le reliage DNS est active par defaut avec
+  une liste d'hotes **vide**, donc le serveur deploye aurait refuse toutes les requetes
+  en se contentant d'un avertissement dans ses journaux.
+  **Trois pannes causees par l'amorcage, aucune trouvee par relecture.**
+  La premiere a mis le site hors ligne : `count(*)` sur 64 millions de lignes dans
+  `/v1/meta`, qui est la sonde de vivacite du conteneur. Chronometre depuis a **3,96 s**
+  au repos pour quatre secondes de budget, ce qui explique son intermittence -- la sonde
+  ne tombe que quand la machine travaille, c'est-a-dire pendant un deploiement.
+  La deuxieme, trouvee en lisant le plan d'execution avant qu'elle ne tombe : les
+  recherches faisaient un parcours d'index par station **et par partition**, 242 apres
+  l'amorcage. Corrigee par une borne basse sur `maj`, placee un jour avant le seuil de
+  peremption donc sans changer aucun resultat. La meme correction sur
+  `marts.prix_courant` a fait passer les anecdotes de **28,7 s avec dix-neuf delais
+  depasses sur vingt** a **1,1 s sans aucun echec**.
+  La troisieme, trouvee en lisant la reponse en production une fois qu'elle etait assez
+  rapide pour etre lisible : des agregats dates du **25 decembre** alors qu'on etait le
+  28 novembre. L'amorcage demandait « l'annee 2026 » en novembre et le calcul en masse
+  extrapolait le dernier prix connu sur trente jours. L'anecdote du departement le moins
+  cher de la semaine portait donc sur sept jours a venir. La base se repare desormais
+  d'elle-meme a chaque collecte, et un neuvieme controle qualite pose la question :
+  `aucune_date_future` surveillait `fact_prix` depuis le Jalon 2, rien ne surveillait
+  les agregats.
+  **Deux de mes tests passaient pour de mauvaises raisons.** Celui du dossier `mcp/`
+  verifiait que `mcp.__file__` ne contenait pas « carburant » -- or `__file__` vaut
+  `None` pour un paquet-espace de noms, ce qu'etait justement `mcp` quand le dossier du
+  projet le masquait : le test comparait une chaine vide et passait **grace** au defaut
+  qu'il surveillait. Celui de la fenetre glissante attendait le retour du budget a la
+  bascule exacte de fenetre. Les deux reecrits sur la vraie propriete.
+  **Un piege d'outillage, une demi-heure perdue, et une regle en plus.** Sans
+  `mcp/tests/__init__.py`, pytest nomme les modules de test `mcp.tests.test_...`,
+  importe `mcp` comme paquet-espace de noms depuis la racine du depot et masque le SDK
+  pour toute la session -- « No module named 'mcp.server' » alors que
+  `python -c "import mcp.server"` fonctionne. Le layout `src/` que la spec exigeait ne
+  suffisait pas. Consequence : `mypy` tourne un paquet a la fois, `etl/tests` et
+  `mcp/tests` ayant chacun un module nomme « tests ».
+  **293 tests unitaires et 128 d'integration** contre une vraie base PostGIS.
 
 - **2026-11-28 — Jalon 3 : l'API complete, et deux pannes causees par le succes de
   l'amorcage.**
