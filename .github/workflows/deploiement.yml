@@ -288,3 +288,35 @@ jobs:
           path: docs/captures/production/
           retention-days: 14
           if-no-files-found: warn
+
+  mcp-distant:
+    name: Le connecteur MCP distant, avec un vrai client
+    needs: deploiement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Installer Python
+        run: uv python install 3.14
+
+      - name: Synchroniser le workspace
+        run: uv sync --all-packages --frozen
+
+      - name: Interroger le connecteur avec le client MCP officiel
+        # Ce que les tests en memoire ne peuvent pas verifier : que le transport
+        # Streamable HTTP survit a Caddy, a TLS, a la validation de l'en-tete `Host`
+        # et au mode sans etat. Chacun a sa facon de tomber en silence -- une mise en
+        # tampon qui retient les evenements, un `Host` refuse avec un simple
+        # avertissement dans les journaux du conteneur.
+        #
+        # Le dernier appel pose la question du cadrage du projet, « Je suis au Prado
+        # a Marseille », et exige une demande de precision : l'avenue du Prado existe
+        # en 13006 et en 13008.
+        env:
+          SITE: ${{ vars.CARBURANT_SITE_URL || env.SITE_PAR_DEFAUT }}
+        run: uv run python infra/scripts/verifier-mcp-distant.py "${SITE%/}/mcp"
