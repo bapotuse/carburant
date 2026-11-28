@@ -174,7 +174,8 @@ Mesurés le 23/11/2026. Les cases vides seront remplies au jalon indiqué.
 | Prix rejetés à la validation | **5** | tous des E85 à 1,99 €, erreurs de saisie |
 | Idempotence | **0 prix inséré, 33 153 déjà connus** | deuxième exécution de suite sur les mêmes données |
 | Partitions créées | **15** | juillet 2025 → décembre 2026, partition DEFAULT vide |
-| `/v1/stations/proches`, p95 | **18,7 ms** | 200 requêtes dans dix villes de France (médiane 10,4 ms, max 65,5 ms) |
+| `/v1/stations/proches`, p95, en développement | **18,7 ms** | 200 requêtes dans dix villes de France, sur une collecte (médiane 10,4 ms) |
+| `/v1/stations/proches`, p95, **sur le VPS, sur 64 M de lignes** | **33,5 ms** | 200 requêtes dans dix villes, dans le conteneur de l'API ; budget du Jalon 3 : 300 ms |
 | Couverture des enseignes | **99,4 %** | 9 761 par identifiant officiel OSM, 8 par géographie, 59 sans |
 | Part de prix atypiques signalés | **1,21 %** | sur 25 359 prix frais, fourchette attendue 0,4 à 2,5 % |
 | Poids réel d'une ligne d'historique | **120,2 octets** | mesuré sur 5,9 M de lignes (431 Mo de données + 245 Mo d'index) |
@@ -188,6 +189,12 @@ Mesurés le 23/11/2026. Les cases vides seront remplies au jalon indiqué.
 | Agrégats journaliers en base | **3 836 872 lignes** sur **7 299 jours** | France, 96 départements, 2 réseaux, 6 carburants |
 | Idempotence sur recouvrement réel | **44 843 prix déjà connus** en 2026 | ceux que le collecteur courant avait déjà chargés |
 | Prix atypiques après amorçage | **1,38 %** (379 sur 27 556) | seuil d'alerte à 5 % |
+| Routes de l'API | **11** | contrat audité : 34 schémas, aucune description ni paramètre manquant |
+| Comptage exact de `fact_prix` vs son estimation | **3 955 ms** contre **12,7 ms** | la raison pour laquelle `/v1/meta` ne compte plus rien |
+| `/v1/anecdotes/du-jour`, avant et après la borne d'horizon | **28 655 ms** → **1 118 ms** | 19 délais dépassés sur 20 → aucun |
+| Outils MCP | **6**, tous en lecture seule | vérifiés après chaque déploiement par deux clients indépendants |
+| Jour de la semaine le moins cher, sur 20 ans | **dimanche**, −0,065 centime/L | 1 041 semaines, tendance de fond retirée — soit 3 centimes sur un plein |
+| Tests | **293 unitaires + 128 d'intégration** | `make check` ; l'intégration tourne contre un vrai PostGIS |
 | Scores Lighthouse mobile | à mesurer (Jalon 5) | |
 
 ## 6. Ce qui a été découvert en regardant les vraies données
@@ -249,6 +256,54 @@ est celle du dernier *changement* de prix, pas du dernier contrôle. Une station
 bouge pas ses prix pendant dix jours n'est pas pour autant fausse. Exclure les prix de
 plus de 7 jours, comme prévu initialement, aurait retiré 18 % des prix et 40 % du GPLc —
 c'est-à-dire des stations qui existent et qui vendent au prix affiché.
+
+## 6 bis. Ce que l'amorçage de l'historique a cassé
+
+Trois pannes causées par un chargement de données **réussi**, et c'est peut-être la
+meilleure histoire du projet : elles montrent qu'un système change de nature quand son
+volume change d'ordre de grandeur, et qu'aucune relecture de code ne l'anticipe.
+
+**Une requête inoffensive devenue mortelle.** `/v1/meta` comptait les lignes de la table
+de faits : `count(*) FROM marts.fact_prix`. Écrite au Jalon 1 sur 33 000 lignes, elle
+répondait en 10 ms. Après l'amorçage, 64 millions de lignes sur 242 partitions et 8 Go à
+parcourir : **3,96 s mesurées sur le VPS au repos**. Or cette route est la **sonde de
+vivacité** du conteneur, avec quatre secondes de budget. La sonde est donc tombée dès
+que la machine a eu autre chose à faire — c'est-à-dire pendant un déploiement. Docker a
+déclaré l'API malade, le conteneur web n'a pas démarré faute de sa dépendance, et le site
+est tombé. Personne n'avait touché cette ligne depuis quatre jours.
+
+La correction est la somme de `pg_class.reltuples` sur les partitions, **12,7 ms** : la
+statistique que PostgreSQL tient déjà à jour. Le champ s'appelle désormais
+`prix_connus_environ`, parce que ce n'est plus un comptage. Et le test qui verrouille
+cela ne mesure pas un temps, il **lit le plan d'exécution** et exige que la table de
+faits n'y figure pas — mesurer un temps n'aurait rien prouvé, puisque sur la base de
+test compter trente lignes est instantané. C'est précisément pour cette raison que le
+défaut avait traversé deux jalons.
+
+**Des recherches qui traversaient vingt ans.** Trouvée en lisant un plan d'exécution
+avant qu'elle ne tombe : la recherche de stations proches prenait le dernier prix de
+chaque station par un `DISTINCT ON` sans borne de date. Le plan faisait donc un parcours
+d'index **par station candidate et par partition** — 242 — puis triait vingt ans de
+changements pour en garder un. La correction est une borne basse sur `maj`, placée un
+jour **avant** le seuil de péremption : elle n'écarte donc que des prix que les filtres
+existants écartaient déjà, et un test l'exige de la base elle-même. Effet mesuré sur
+`/v1/anecdotes/du-jour`, qui souffrait du même défaut par l'intermédiaire d'une vue :
+**28,7 s avec dix-neuf délais dépassés sur vingt → 1,1 s sans aucun échec**.
+
+**Des agrégats datés du 25 décembre, le 28 novembre.** L'amorçage demandait les agrégats
+de « l'année 2026 », et le calcul en masse considère qu'un prix vaut jusqu'à trente jours
+après son dernier changement : il a donc extrapolé le dernier prix connu jusqu'à la fin
+de l'année. L'anecdote « département le moins cher de la semaine » portait par conséquent
+sur sept jours **à venir** — sept copies du même instantané figé, présentées comme une
+moyenne hebdomadaire. Trouvée en lisant la réponse en production, une fois qu'elle était
+assez rapide pour être lisible. La base se répare maintenant d'elle-même à chaque
+collecte, et un neuvième contrôle qualité pose la question : un contrôle surveillait les
+dates futures dans `fact_prix` depuis le Jalon 2, aucun ne les surveillait dans les
+agrégats.
+
+**Ce qu'on en retient**, et c'est transposable : un test qui passe sur un jeu de données
+de trente lignes ne dit rien du comportement sur soixante millions ; ce qu'il faut
+verrouiller alors n'est pas une durée mais une **forme de plan d'exécution**.
 
 ## 7. Vingt questions qu'un recruteur peut poser
 
