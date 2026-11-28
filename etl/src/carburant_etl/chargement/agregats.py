@@ -253,6 +253,9 @@ def rafraichir(
     l'amorcage.
     """
     rafraichir_reference(connexion)
+    # La collecte tourne toutes les quinze minutes : c'est elle qui repare une base
+    # ou un amorcage aurait laisse des agregats de jours a venir.
+    purger_le_futur(connexion)
     a_calculer = jours_a_calculer(connexion, limite=jours)
     # Pas de verrou ici : `rafraichir` est appelee depuis le pipeline, qui le detient
     # deja. Les verrous consultatifs se reentrent dans une meme session, mais prendre
@@ -400,6 +403,40 @@ ON CONFLICT (jour, carburant, dimension, valeur) DO UPDATE SET
 """
 
 
+_PURGER_LE_FUTUR = """
+DELETE FROM marts.agregat_prix_jour WHERE jour > %(aujourdhui)s::date
+"""
+
+
+def purger_le_futur(connexion: psycopg.Connection[tuple[object, ...]]) -> int:
+    """Supprime les agregats dont le jour est dans le futur. Il n'en existe pas.
+
+    **Pourquoi cette fonction existe.** `calculer_periode(2026-01-01, 2026-12-31)`,
+    lancee le 26 novembre par l'amorcage, a produit des agregats jusqu'au
+    **25 decembre 2026** : la requete en masse considere qu'un prix vaut jusqu'a
+    trente jours apres son dernier changement, et elle a donc extrapole le dernier
+    prix connu sur toute la fin de l'annee. Constate le 28/11/2026 en lisant la
+    reponse de `/v1/anecdotes/du-jour` en production, qui annoncait un
+    « departement le moins cher de la semaine » calcule sur sept jours a venir --
+    autrement dit sur le meme instantane fige, repete sept fois.
+
+    La fonction est appelee par les deux chemins de calcul, pas seulement par celui
+    qui a cause le probleme : la collecte planifiee tourne toutes les quinze minutes
+    et repare donc d'elle-meme une base deja polluee, sans intervention.
+    """
+    aujourdhui = dt.datetime.now(tz=PARIS).date()
+    with connexion.transaction(), connexion.cursor() as curseur:
+        curseur.execute(_PURGER_LE_FUTUR, {"aujourdhui": aujourdhui})
+        supprimees = curseur.rowcount
+    if supprimees:
+        journal.warning(
+            "%d agregat(s) posterieur(s) a %s supprime(s) : un jour a venir n'a pas de prix",
+            supprimees,
+            aujourdhui,
+        )
+    return supprimees
+
+
 def calculer_periode(
     connexion: psycopg.Connection[tuple[object, ...]],
     debut: dt.date,
@@ -408,10 +445,23 @@ def calculer_periode(
     """Calcule les agregats de toute une periode en une passe.
 
     A utiliser apres un amorcage : `rafraichir` convient pour un ou deux jours, pas
-    pour dix-neuf ans. Idempotent comme elle.
+    pour vingt ans. Idempotent comme elle.
+
+    La fin est **ramenee a aujourd'hui** : demander l'annee 2026 entiere au mois de
+    novembre ne doit pas fabriquer des agregats de decembre. C'est ce qui s'est
+    passe, et c'est pourquoi la borne est posee ici plutot que chez l'appelant --
+    tout appelant en beneficie, pas seulement la ligne de commande.
     """
     if fin < debut:
         raise ValueError(f"periode a l envers : {debut} -> {fin}")
+    aujourdhui = dt.datetime.now(tz=PARIS).date()
+    if debut > aujourdhui:
+        journal.info("periode entierement a venir (%s > %s) : rien a calculer", debut, aujourdhui)
+        return 0
+    if fin > aujourdhui:
+        journal.info("fin ramenee de %s a aujourd hui (%s)", fin, aujourdhui)
+        fin = aujourdhui
+    purger_le_futur(connexion)
     with (
         exclusif(connexion, operation=f"agregats {debut} -> {fin}"),
         connexion.transaction(),

@@ -54,7 +54,23 @@
 		reverse_proxy api:8000
 	}
 
-	# `/mcp` arrivera au Jalon 4, avec le transport Streamable HTTP.
+	# Le connecteur MCP distant, en transport Streamable HTTP. Un recruteur l'ajoute
+	# a son client MCP sans rien installer.
+	#
+	# Pas de politique de securite du contenu ici : la reponse n'est pas une page, et
+	# un client MCP n'est pas un navigateur. Le serveur, lui, valide l'en-tete `Host`
+	# (protection contre le reliage DNS) ; Caddy transmet l'hote d'origine, c'est donc
+	# le domaine public qu'il voit.
+	#
+	# `flush_interval -1` desactive la mise en tampon des reponses : le transport
+	# diffuse des evenements (`text/event-stream`), et les mettre en tampon les
+	# retiendrait jusqu'a la fin de l'echange -- ce qui ressemble a un serveur muet.
+	@mcp path /mcp /mcp/*
+	handle @mcp {
+		reverse_proxy mcp:8001 {
+			flush_interval -1
+		}
+	}
 
 	handle {
 		reverse_proxy web:3000

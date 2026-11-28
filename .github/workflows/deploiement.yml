@@ -32,7 +32,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        brique: [api, web, etl]
+        brique: [api, web, etl, mcp]
     steps:
       - uses: actions/checkout@v5
 

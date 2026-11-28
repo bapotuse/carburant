@@ -77,6 +77,25 @@ services:
     restart: unless-stopped
     networks: [interne, sortie]
 
+  mcp:
+    image: ${REGISTRE:-ghcr.io/bapotuse}/carburant-mcp:${TAG:-main}
+    container_name: carburant_mcp
+    init: true
+    # Il appelle l'API **par le reseau Docker**, pas par le domaine public : inutile
+    # de ressortir sur internet et de repasser par Caddy pour une requete interne.
+    environment:
+      CARBURANT_API_BASE: http://api:8000/v1
+      CARBURANT_MCP_HOTES: ${CARBURANT_DOMAINE:?CARBURANT_DOMAINE manquant dans le .env du VPS}
+    # `0.0.0.0` dans le conteneur : aucun port n'est publie, seul Caddy l'atteint sur
+    # le reseau Docker.
+    command: ["prix-carburant-mcp", "--transport", "http", "--hote", "0.0.0.0", "--port", "8001"]
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+    # Pas de reseau `interne` : le serveur MCP n'a aucune raison de voir la base.
+    # Il est sur `sortie` pour que Caddy l'atteigne, et sur rien d'autre.
+    networks: [sortie]
+
   caddy:
     image: caddy:2.10-alpine
     container_name: carburant_caddy
@@ -101,7 +120,10 @@ services:
       - caddy_config:/config
     depends_on:
       web: {condition: service_started}
-    networks: [interne]
+    # `sortie` en plus d'`interne`, pour atteindre le serveur MCP. L'alternative
+    # aurait ete de mettre le serveur MCP sur `interne`, ou vit la base : c'est
+    # Caddy qu'on rapproche de lui, pas lui qu'on rapproche de la base.
+    networks: [interne, sortie]
 
 networks:
   interne:

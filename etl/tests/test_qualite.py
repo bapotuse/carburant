@@ -566,3 +566,73 @@ def test_sql_et_python_jugent_pareil_au_seuil_exact(base: str, mad: float, ecart
     assert cote_sql == cote_python, (
         f"divergence a mad={mad}, ecart={ecart} : SQL {cote_sql}, Python {cote_python}"
     )
+
+
+@pytest.mark.integration
+def test_un_agregat_de_jour_a_venir_fait_echouer_le_controle(base: str) -> None:
+    """Le controle qui manquait, et le defaut qu'il aurait vu.
+
+    Le 28/11/2026, la base de production contenait des agregats jusqu'au
+    25 decembre : l'amorcage avait demande « l'annee 2026 » en novembre, et le calcul
+    en masse etend le dernier prix connu sur trente jours. L'anecdote du departement
+    le moins cher de la semaine portait donc sur sept jours a venir -- sept copies du
+    meme instantane fige. Aucun controle ne posait la question.
+    """
+    from carburant_etl.qualite.controles import CONTROLES, executer
+
+    controle = next(c for c in CONTROLES if c.nom == "aucun_agregat_futur")
+    assert controle.bloquant, "un agregat de jour a venir devient un chiffre affiche"
+
+    with psycopg.connect(base, autocommit=True) as connexion:
+        verdicts = {v.nom: v for v in executer(connexion, [controle])}
+        assert verdicts["aucun_agregat_futur"].ok, "une base propre doit passer"
+
+        demain = dt.datetime.now(tz=PARIS).date() + dt.timedelta(days=1)
+        connexion.execute(
+            "INSERT INTO marts.agregat_prix_jour "
+            "(jour, carburant, dimension, valeur, stations, exclus, "
+            " prix_min, prix_median, prix_moyen, prix_max) "
+            "VALUES (%s, 'gazole', 'france', '', 100, 0, 1.800, 1.900, 1.900, 2.000)",
+            (demain,),
+        )
+        verdicts = {v.nom: v for v in executer(connexion, [controle])}
+
+    verdict = verdicts["aucun_agregat_futur"]
+    assert not verdict.ok, "un agregat de demain doit faire echouer le controle"
+    assert "jours a venir" in verdict.mesure
+    assert str(demain) in verdict.mesure, "la mesure doit dire jusqu'ou va le probleme"
+
+
+@pytest.mark.integration
+def test_le_calcul_en_masse_ne_depasse_pas_aujourd_hui(base: str) -> None:
+    """Demander l'annee entiere en novembre ne doit pas fabriquer du mois de decembre.
+
+    La borne est posee dans `calculer_periode` et non chez l'appelant : tout appelant
+    en beneficie, pas seulement la ligne de commande qui a cause le probleme.
+    """
+    from carburant_etl.chargement.agregats import calculer_periode, purger_le_futur
+
+    aujourdhui = dt.datetime.now(tz=PARIS).date()
+    with psycopg.connect(base, autocommit=True) as connexion:
+        demain = aujourdhui + dt.timedelta(days=1)
+        connexion.execute(
+            "INSERT INTO marts.agregat_prix_jour "
+            "(jour, carburant, dimension, valeur, stations, exclus, "
+            " prix_min, prix_median, prix_moyen, prix_max) "
+            "VALUES (%s, 'gazole', 'france', '', 100, 0, 1.800, 1.900, 1.900, 2.000)",
+            (demain,),
+        )
+        assert purger_le_futur(connexion) == 1, "la purge doit retirer l'agregat de demain"
+
+        # Une periode entierement a venir ne calcule rien, et ne plante pas.
+        assert calculer_periode(connexion, demain, demain + dt.timedelta(days=30)) == 0
+
+        # Une periode qui depasse aujourd'hui est ramenee : aucun jour a venir ne sort.
+        calculer_periode(
+            connexion, aujourdhui - dt.timedelta(days=2), aujourdhui + dt.timedelta(days=40)
+        )
+        ligne = connexion.execute(
+            "SELECT count(*) FROM marts.agregat_prix_jour WHERE jour > %s", (aujourdhui,)
+        ).fetchone()
+    assert ligne is not None
+    assert ligne[0] == 0, "aucun agregat ne doit porter un jour a venir"

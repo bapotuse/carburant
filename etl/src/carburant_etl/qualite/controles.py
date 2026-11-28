@@ -200,6 +200,32 @@ SELECT n = 0,
   FROM futures
 """
 
+# Le controle precedent regarde `fact_prix`. Celui-ci regarde les agregats, et il
+# manquait : le 28/11/2026, la base de production contenait des agregats journaliers
+# jusqu'au **25 decembre**, parce que l'amorcage avait demande « l'annee 2026 » au
+# mois de novembre et que le calcul en masse etend le dernier prix connu sur trente
+# jours. Personne ne l'avait vu, parce qu'aucun controle ne posait la question.
+#
+# Consequence visible : l'anecdote du departement le moins cher de la semaine portait
+# sur sept jours a venir, donc sept copies du meme instantane fige.
+#
+# Bloquant : un agregat de jour a venir se transforme en chiffre affiche.
+_AUCUN_AGREGAT_FUTUR: Final = """
+WITH futurs AS (
+    SELECT count(*)::int AS n, max(jour) AS plus_loin
+      FROM marts.agregat_prix_jour
+      -- La journee en cours est legitime : on compare a la date du jour a Paris,
+      -- pas a l'instant present.
+     WHERE jour > (now() AT TIME ZONE 'Europe/Paris')::date
+)
+SELECT n = 0,
+       CASE WHEN n = 0 THEN 'aucun agregat posterieur a aujourd hui'
+            ELSE n || ' agregat(s) de jours a venir, jusqu au ' || plus_loin
+                 || ' : un jour a venir n a pas de prix'
+       END
+  FROM futurs
+"""
+
 _SOURCE_FRAICHE: Final = """
 WITH derniere AS (SELECT max(maj) AS m FROM marts.fact_prix)
 SELECT m IS NOT NULL AND m >= now() - interval '2 hours',
@@ -248,6 +274,11 @@ CONTROLES: Final[tuple[Controle, ...]] = (
         nom="aucune_date_future",
         question="Aucune date de mise a jour n'est-elle dans le futur ?",
         sql=_AUCUNE_DATE_FUTURE,
+    ),
+    Controle(
+        nom="aucun_agregat_futur",
+        question="Aucun agregat journalier n'est-il date d'un jour a venir ?",
+        sql=_AUCUN_AGREGAT_FUTUR,
     ),
     Controle(
         nom="source_fraiche",
