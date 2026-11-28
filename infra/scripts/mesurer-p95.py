@@ -18,6 +18,7 @@ import argparse
 import statistics
 import sys
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -48,10 +49,14 @@ class Mesures:
     route: str
     temps: list[float] = field(default_factory=list)
     echecs: int = 0
+    causes: Counter[str] = field(default_factory=Counter)
+    """Pourquoi les echecs ont echoue. Un script de mesure qui annonce « 20 echecs »
+    sans dire lesquels oblige a tout refaire a la main pour le savoir."""
 
     def ajouter(self, debut: float, reponse: httpx.Response) -> None:
         if reponse.status_code >= 400:
             self.echecs += 1
+            self.causes[f"HTTP {reponse.status_code}"] += 1
             return
         self.temps.append((time.perf_counter() - debut) * 1000)
 
@@ -73,15 +78,24 @@ class Mesures:
         haut = min(bas + 1, len(ordonnes) - 1)
         return ordonnes[bas] + (position - bas) * (ordonnes[haut] - ordonnes[bas])
 
+    @property
+    def _pourquoi(self) -> str:
+        if not self.causes:
+            return ""
+        detail = ", ".join(f"{cause} x{nombre}" for cause, nombre in self.causes.most_common())
+        return f"  [{self.echecs} echec(s) : {detail}]"
+
     def ligne(self) -> str:
         if not self.temps:
-            return f"{self.route:<34} aucune reponse exploitable ({self.echecs} echec(s))"
+            return (
+                f"{self.route:<34} aucune reponse exploitable"
+                f"{self._pourquoi or f'  [{self.echecs} echec(s)]'}"
+            )
         return (
             f"{self.route:<34} n={len(self.temps):<5} "
             f"mediane {statistics.median(self.temps):7.1f} ms  "
             f"p95 {self.p95:7.1f} ms  "
-            f"max {max(self.temps):7.1f} ms"
-            + (f"  [{self.echecs} echec(s)]" if self.echecs else "")
+            f"max {max(self.temps):7.1f} ms" + self._pourquoi
         )
 
 
@@ -91,6 +105,7 @@ def _appeler(client: httpx.Client, mesures: Mesures, chemin: str, **params: Any)
         reponse = client.get(chemin, params=params)
     except httpx.HTTPError as erreur:
         mesures.echecs += 1
+        mesures.causes[type(erreur).__name__] += 1
         print(f"  echec sur {chemin} : {erreur}", file=sys.stderr)
         return
     mesures.ajouter(debut, reponse)
@@ -104,6 +119,23 @@ def mesurer(base: str, repetitions: int) -> list[Mesures]:
         # Une requete pour rien d'abord : la premiere paie l'ouverture du pool de
         # connexions a la base et faussait la mediane.
         client.get("/v1/sante")
+
+        # Les noms de parametres de l'API sont verifies ici, avant de mesurer quoi que
+        # ce soit. Sans ce garde-fou, une faute de frappe ferait repondre 422 a chaque
+        # requete et le script rapporterait « aucune reponse exploitable » -- ce qui
+        # ressemble a une panne de l'API alors que c'est la mesure qui est fausse.
+        # Constate : la premiere version demandait `latitude`/`longitude` quand l'API
+        # attend `lat`/`lon`.
+        controle = client.get(
+            "/v1/stations/proches",
+            params={"lat": 43.2726, "lon": 5.3846, "carburant": "gazole", "rayon_km": 10},
+        )
+        if controle.status_code != 200:
+            raise SystemExit(
+                "La requete de controle a repondu "
+                f"{controle.status_code} : {controle.text[:300]}\n"
+                "Les noms de parametres de ce script ne correspondent plus a l'API."
+            )
 
         proches = Mesures("/v1/stations/proches")
         meilleure = Mesures("/v1/stations/meilleure")
@@ -121,8 +153,8 @@ def mesurer(base: str, repetitions: int) -> list[Mesures]:
                     client,
                     proches,
                     "/v1/stations/proches",
-                    latitude=lat,
-                    longitude=lon,
+                    lat=lat,
+                    lon=lon,
                     carburant=carburant,
                     rayon_km=10,
                 )
@@ -130,8 +162,8 @@ def mesurer(base: str, repetitions: int) -> list[Mesures]:
                     client,
                     meilleure,
                     "/v1/stations/meilleure",
-                    latitude=lat,
-                    longitude=lon,
+                    lat=lat,
+                    lon=lon,
                     carburant=carburant,
                     autonomie_km=60,
                 )
@@ -141,7 +173,7 @@ def mesurer(base: str, repetitions: int) -> list[Mesures]:
         # survive a une station qui ferme.
         autour = client.get(
             "/v1/stations/proches",
-            params={"latitude": 43.2726, "longitude": 5.3846, "rayon_km": 10},
+            params={"lat": 43.2726, "lon": 5.3846, "rayon_km": 10},
         )
         identifiants = [s["id"] for s in autour.json().get("stations", [])][:10] or [13008003]
 
