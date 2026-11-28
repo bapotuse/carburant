@@ -1,51 +1,54 @@
 # Avancement
 
 ## Prochaine action
-**J2, les enseignes OpenStreetMap.** Le flux officiel ne donne ni nom ni enseigne :
-le rapprochement spatial avec OpenStreetMap (`amenity=fuel`, tags `brand` et `name`)
-est la piste retenue au cadrage. Commencer par une **vraie requete Overpass** avant
-d'ecrire quoi que ce soit, et ajouter l'hote a la politique reseau de
-l'environnement. Taux de correspondance a mesurer et a afficher ; sous un seuil, pas
-de classement par enseigne.
+**Lancer le workflow « Performance de l'API » et lire son resultat.** C'est le dernier
+critere de sortie du Jalon 3 : p95 de `/v1/stations/proches` sous 300 ms **sur le
+VPS**, mesure depuis l'interieur du conteneur de l'API. Tout le reste du jalon est
+fait et verifie. Si une route depasse son budget, la corriger avant d'ouvrir le
+Jalon 4.
 
-Puis, dans l'ordre : l'amorcage complet des seize annees **sur le VPS** (ici il
-serait perdu a la fin du conteneur), la revue `revue-donnees`, et la proposition dbt
-dans le bilan de jalon.
-
-**Fait et verifie au J2, le 26/11/2026 :**
-
-1. **Les controles qualite.** Huit questions posees en SQL, chacune rendant un
-   verdict et une mesure lisible. Deux niveaux : bloquant (execution en echec,
-   processus en erreur) et avertissement. Un controle en echec ne rejette jamais les
-   donnees chargees. Mesure sur les vraies donnees : **1,21 % de prix atypiques** sur
-   25 359 prix frais, pile dans la fourchette de 0,4 a 2,5 % de la reconnaissance.
-2. **La regle des prix atypiques**, qui existait en Python sans etre branchee, vit
-   desormais en SQL a cote de la donnee, avec un test qui verifie que les deux
-   implementations disent la meme chose.
-3. **Les agregats journaliers** (`marts.agregat_prix_jour`), calcules sur les prix
-   **en vigueur** et non sur les seuls prix modifies ce jour-la.
-4. **Les facteurs d'emission de l'ADEME**, historises, avec un garde-fou qui refuse
-   un facteur dont l'unite ou l'ordre de grandeur a change.
-5. **L'amorcage de l'historique** : `etl backfill --annee AAAA`, en streaming.
-   Charge en vrai : 2007 (862 528 prix, mediane gazole **1,075 EUR**) et 2022
-   (5 043 144 prix, mediane **1,862 EUR**) -- les deux eres d'unite. Rejoue : zero
-   ligne inseree. Partition DEFAULT : **0 ligne** sur 27 partitions.
-
-**Trois defauts trouves en faisant tourner, pas en relisant** : le controle des prix
-atypiques depassait 25 secondes (reference departementale desormais materialisee :
-0,84 s) ; le parseur d'archives attrapait la mauvaise exception et un nom de
-carburant inattendu aurait fait planter tout l'amorcage ; et deux de mes propres
-tests etaient faux.
-
-**Deux corrections de la spec, par mesure** : les noms de champs de la Base Carbone
-portent les accents, et l'historique complet pesera **7,7 Go** pour **50 minutes** de
-chargement, et non 6,5 Go pour 30 minutes (120,2 octets par ligne mesures contre 102
-estimes). Le VPS a 17 Go libres : cela passe, sans marge pour un doublement.
-
-**Le Jalon 1 est en ligne** : <https://carburant.144-24-195-97.sslip.io>, en HTTPS.
+Ensuite : le **Jalon 4, le serveur MCP**, qui commence par une validation de gout (le
+nom du package) et une action de Baptiste (un compte PyPI). Les deux peuvent attendre :
+le serveur s'installe aussi depuis le depot git.
 
 Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seuils, et
 `docs/decisions.md` avant de refaire un choix deja tranche.
+
+**L'historique complet est en base, sur le VPS**, charge le 26/11/2026 :
+**64 062 124 changements de prix** du 01/01/2007 au 26/11/2026, **242 partitions**,
+partition DEFAULT a **0 ligne**, **3 836 872 lignes d'agregat** sur **7 299 jours**,
+base a **8 477 Mo**, huit controles qualite au vert. 3 h 20 de bout en bout.
+Le compte de lignes estime au cadrage etait juste a 0,1 % pres ; la duree etait fausse
+d'un facteur 2,7, parce qu'elle avait ete chronometree sur la machine de developpement
+et non sur l'Ampere a CPU partage du VPS. **Une duree mesuree ici ne se transporte pas
+sur le VPS** : regle a retenir.
+
+**L'amorcage a casse deux choses, et c'est la partie interessante.**
+
+1. **Le site est tombe.** `/v1/meta` faisait un `count(*) FROM marts.fact_prix`,
+   inoffensif sur 33 000 lignes au Jalon 1, mortel sur 64 millions reparties sur
+   242 partitions. Or `/v1/meta` est la sonde de vivacite du conteneur, avec quatre
+   secondes de budget : la sonde a echoue, Docker a declare l'API malade,
+   `docker compose up --wait` a echoue et le conteneur web n'a pas demarre. Un
+   chargement de donnees reussi a mis le site hors ligne, par une requete que
+   personne n'avait touchee. Remplace par la somme de `pg_class.reltuples` sur les
+   partitions, et le champ s'appelle maintenant `prix_connus_environ` pour que
+   personne ne le presente comme exact. **Un test verrouille la forme du plan**, pas
+   sa vitesse : sur la base de test, compter trente lignes est instantane, et c'est
+   exactement pour cela que le defaut a survecu quatre jours.
+2. **Les recherches traversaient vingt ans.** Trouve en lisant le plan reel, pas en
+   attendant la panne : `/v1/stations/proches` faisait un parcours d'index par station
+   candidate **et par partition**, puis triait vingt ans de changements de prix pour
+   en garder un. Corrige par une borne basse sur `maj`, placee un jour avant le seuil
+   de peremption -- donc sans changer aucun resultat, puisque les recherches ecartent
+   deja les prix perimes. Elagage verifie : douze sous-plans retires sur seize
+   partitions locales.
+
+Le deploiement dit desormais **pourquoi** un conteneur est malade : etat, journal de
+la sonde et dernieres lignes des quatre conteneurs. Jusqu'ici il s'arretait sur
+« container carburant_api is unhealthy » et il fallait deviner.
+
+**Le Jalon 1 est en ligne** : <https://carburant.144-24-195-97.sslip.io>, en HTTPS.
 
 ## En attente de Baptiste
 
@@ -146,17 +149,30 @@ par le déploiement lui-même. Reste le test sur l'iPhone réel de Baptiste.
 - [x] ~~`snapshot_prix_jour`~~ `marts.agregat_prix_jour` et vues agrégées — 26/11/2026, grain revu et spec corrigée
 - [x] `ref_facteur_emission` depuis l'API ADEME, versionnée — 26/11/2026, `etl facteurs`
 - [x] Enseignes via OpenStreetMap, taux de correspondance mesuré — 26/11/2026, **99,4 %** sur le VPS (9 761 par identifiant officiel, 8 par distance, 59 sans)
-- [x] Amorçage de l'historique depuis les archives, en streaming — 26/11/2026, `etl backfill`, deux années chargées en local. Les seize années lancées sur le VPS par le workflow `amorcage.yml`.
+- [x] Amorçage de l'historique depuis les archives, en streaming — **fait sur le VPS le 26/11/2026** : 64 062 124 prix, 2007 → 2026 (20 ans), 242 partitions, DEFAULT vide, 8 477 Mo, 3 h 20
 - [x] Contrôles qualité à chaque exécution, journal `meta.execution_etl` — 26/11/2026, huit contrôles
 - [x] Revue `revue-donnees` sans écart bloquant — 26/11/2026, **aucun écart bloquant**, cinq défauts réels corrigés
 - [x] Proposition dbt dans le bilan — `docs/proposition-dbt.md`
 
 Sortie : tests verts ; rapport qualité de la dernière exécution ; volumes réels notés.
+**Atteinte le 26/11/2026** : huit contrôles au vert après amorçage (1,38 % de prix
+atypiques sur 27 556 prix frais, seuil 5 %), volumes réels ci-dessus, et l'année 2026
+a signalé 44 843 prix **déjà connus** — ceux que le collecteur courant avait déjà
+chargés. L'idempotence est donc vérifiée sur un recouvrement réel, pas seulement sur
+une relance à l'identique.
 
 ### J3 — API complète
-- [ ] Tous les endpoints, OpenAPI documentée, client TypeScript généré
-- [ ] « Meilleure station » avec tests unitaires, de propriétés et d'intégration
-- [ ] Cache, rate limiting, CORS, erreurs problem+json
+- [x] Tous les endpoints, OpenAPI documentée, client TypeScript généré — 28/11/2026,
+      onze routes ; un job CI `contrat` regénère le client et exige que rien ne bouge
+- [x] « Meilleure station » avec tests unitaires, de propriétés et d'intégration — 26/11/2026
+- [x] Cache, rate limiting, CORS, erreurs problem+json — 28/11/2026, fenêtre glissante
+      à 120 requêtes par minute et par adresse
+- [ ] p95 mesuré sur le VPS, après l'amorçage — workflow `performance.yml`, à lancer
+
+Les routes : `/v1/sante`, `/v1/meta`, `/v1/geocode`, `/v1/stations/proches`,
+`/v1/stations/meilleure`, `/v1/stations/{id}`, `/v1/stations/{id}/historique`,
+`/v1/tendances`, `/v1/empreinte`, `/v1/empreinte/comparaison`,
+`/v1/anecdotes/du-jour`.
 
 Sortie : `/docs` lisible et complet ; tests verts ; p95 < 300 ms sur le VPS pour `/stations/proches`.
 
@@ -189,6 +205,78 @@ Sortie : Lighthouse mobile ≥ 90 dans les 4 catégories sur chaque page (CI) ; 
 Sortie : Baptiste peut présenter le projet avec l'URL, le dépôt et le document de compréhension.
 
 ## Journal
+
+- **2026-11-28 — Jalon 3 : l'API complete, et deux pannes causees par le succes de
+  l'amorcage.**
+  **L'historique est en base sur le VPS** : 64 062 124 changements de prix de 2007 a
+  2026, 242 partitions, DEFAULT vide, 3 836 872 lignes d'agregat sur 7 299 jours,
+  8 477 Mo, 3 h 20 de bout en bout, huit controles au vert. Le nombre de lignes estime
+  au cadrage etait juste a 0,1 % pres. La duree, non : 2,7 fois plus longue, parce que
+  les 45 s par million avaient ete chronometrees ici et non sur l'Ampere a CPU partage
+  du VPS, qui tient 123 s par million. **Une duree mesuree sur la machine de
+  developpement ne se transporte pas sur le VPS.**
+  **Puis l'amorcage a mis le site hors ligne.** `/v1/meta` faisait un `count(*)` sur
+  `marts.fact_prix`. Ecrite au Jalon 1 sur une table de 33 000 lignes, la requete etait
+  instantanee ; sur 64 millions de lignes et 8 Go elle demande une trentaine de
+  secondes. Or `/v1/meta` est la **sonde de vivacite** du conteneur, avec quatre
+  secondes de budget : la sonde a echoue, Docker a declare l'API malade,
+  `docker compose up --wait` a echoue, et le conteneur web n'a pas demarre faute de sa
+  dependance. Un chargement de donnees reussi a casse la production, par une ligne que
+  personne n'avait touchee depuis quatre jours.
+  Remplace par la somme de `pg_class.reltuples` sur les partitions, avec un
+  `greatest(..., 0)` qui n'est pas decoratif : depuis PostgreSQL 14, `reltuples` vaut
+  **-1** sur une table jamais analysee, donc une partition neuve retrancherait une
+  unite au total. Le champ s'appelle desormais `prix_connus_environ`, pour que ni le
+  front ni le serveur MCP ne le presentent comme exact.
+  **Le test qui verrouille cela ne mesure pas un temps, il lit un plan** : il exige que
+  `fact_prix` soit absent du `EXPLAIN`. Mesurer un temps n'aurait rien prouve -- sur la
+  base de test, compter trente lignes est instantane, et c'est precisement pourquoi le
+  defaut a traverse deux jalons. Verifie en remettant le `count(*)` : le test echoue.
+  **Le deploiement explique maintenant ses echecs** : etat, journal de la sonde (sortie
+  et code de chaque tentative) et dernieres lignes des quatre conteneurs. Jusqu'ici il
+  s'arretait sur « container carburant_api is unhealthy ».
+  **La seconde panne n'a pas eu lieu, parce que j'ai lu le plan avant.**
+  `/v1/stations/proches` et `/v1/stations/meilleure` prenaient le dernier prix par
+  `DISTINCT ON` sans borne de date : un parcours d'index par station candidate **et par
+  partition**, puis un tri de vingt ans de changements pour en garder un. Corrige par
+  une borne basse sur `maj`, placee un jour **avant** le seuil de peremption, donc sans
+  changer aucun resultat -- les recherches ecartaient deja les prix perimes. Elagage
+  mesure : douze sous-plans retires sur seize partitions locales, trois retenues.
+  Le seuil de peremption devient une fonction SQL que la classe de fraicheur et
+  l'horizon lisent tous deux, avec un test qui interroge la base : a l'horizon exact un
+  prix doit **deja** etre perime, un jour plus tard il doit encore etre exploitable.
+  Le test d'elagage cree une vraie partition de janvier 2024 et exige qu'elle soit
+  absente du plan : compter les partitions n'aurait rien prouve, le jeu d'essai n'en
+  cree que trois.
+  **Cote fonctionnalites** : `/v1/anecdotes/du-jour` avec ses quatre anecdotes et leurs
+  seuils, la limitation de debit, et le verrouillage du contrat d'API en CI.
+  Pour les anecdotes, la regle de la spec est reprise telle quelle : une anecdote sous
+  son seuil n'est pas approximee, elle sort dans `indisponibles` avec sa raison et sa
+  mesure. La quatrieme -- le jour de la semaine historiquement le moins cher -- demande
+  de **retirer la tendance de fond** : le gazole est passe de 1,07 EUR a 1,86 EUR en
+  vingt ans, et une moyenne brute par jour de la semaine mesurerait cette hausse. Le
+  test plante une tendance pure sur 800 jours, volontairement pas un nombre entier de
+  semaines, et exige deux choses : que la moyenne brute s'y trompe (sinon le test ne
+  prouverait rien) et que la methode retenue rende sept ecarts nuls. Verifie en
+  remettant la version naive : elle designe un gagnant avec 0,004 EUR/L d'ecart tire de
+  la seule tendance.
+  La limitation de debit est une fenetre glissante approchee, 120 requetes par minute
+  et par adresse : une fenetre fixe laisserait passer le double a cheval sur sa
+  frontiere, ce qu'un test verifie en injectant le temps. Memoire bornee a 20 000
+  adresses, sans quoi des adresses tournantes feraient du limiteur lui-meme le vecteur
+  de deni de service. CORS reste **au-dessus** de la limitation : Starlette enveloppe
+  les middlewares a l'envers, et un 429 sans en-tetes CORS s'afficherait comme une
+  erreur reseau.
+  **Le docstring de `app.py` affirmait depuis le Jalon 1 que la CI verifiait que le
+  client TypeScript etait a jour. C'etait faux.** Nouveau job `contrat` : il regenere
+  l'OpenAPI et le client, et exige que rien ne bouge. En le branchant, un piege que
+  seul le fait de commiter a revele : `end-of-file-fixer` ajoutait un saut de ligne
+  final que `make openapi` n'ecrivait pas, et la CI aurait echoue sur ce seul octet.
+  **Trois de mes tests etaient faux et ont ete corriges, pas desactives** : la fenetre
+  glissante attendait le retour du budget a la bascule exacte, ou la fenetre precedente
+  compte encore entierement ; le test d'elagage passait sans rien prouver ; et le test
+  de plan de `/v1/meta` a du etre verifie en remettant le defaut.
+  **236 tests** unitaires et **53 d'integration** contre une vraie base PostGIS.
 
 - **2026-11-26 (suite) — Jalon 2 : enseignes, audit independant, dbt.**
   **Les enseignes, et une correction de plan.** La specification prevoyait un
