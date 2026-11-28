@@ -42,6 +42,24 @@ class Recherche:
     inclure_perimes: bool = False
 
 
+# Borne basse sur `maj`, seule chose qui empeche une recherche de traverser vingt ans
+# d'historique. Sans elle, le plan reel fait un parcours d'index par station candidate
+# **et par partition** -- 242 apres l'amorcage -- puis trie tout pour garder le dernier
+# prix. Avec elle, PostgreSQL elague : trois partitions au lieu de 242 (verifie, douze
+# sous-plans retires sur seize partitions locales).
+#
+# Elle ne change aucun resultat quand les prix perimes sont exclus, ce qui est le cas
+# de toutes les recherches : l'horizon est place un jour **avant** le seuil de
+# peremption, donc tout ce qu'il ecarte aurait de toute facon ete ecarte ensuite
+# (`infra/migrations/011_horizon_recherche.sql`).
+#
+# Elle est donc **assemblee** plutot qu'ecrite en dur, parce qu'une recherche qui
+# demande les prix perimes doit bien aller les chercher. Un `OR %(inclure_perimes)s`
+# aurait suffi a la correction mais aurait tue l'elagage : PostgreSQL n'elague que sur
+# une comparaison simple de la cle de partition. Rien d'exterieur n'entre dans cette
+# interpolation.
+_HORIZON_PROCHES = "AND f.maj >= marts.horizon_prix_exploitable()"
+
 # Le `DISTINCT ON` prend le dernier changement de prix de chaque carburant. La vue
 # `marts.prix_courant` fait la meme chose, mais on l'ecrit ici en toutes lettres pour
 # pouvoir filtrer sur le carburant AVANT de chercher le dernier prix : sur une
@@ -73,6 +91,7 @@ prix AS (
       FROM marts.fact_prix f
       JOIN candidates c ON c.id = f.station_id
      WHERE (%(carburant)s::text IS NULL OR f.carburant = %(carburant)s::text)
+       {horizon}
      ORDER BY f.station_id, f.carburant, f.maj DESC
 ),
 retenues AS (
@@ -106,7 +125,10 @@ async def stations_proches(pool: Pool, recherche: Recherche) -> tuple[list[dict[
     station. Le total compte les stations distinctes avant pagination.
     """
     ordre = _ORDRES[recherche.tri]
-    requete = _SQL_PROCHES.format(ordre=ordre)
+    requete = _SQL_PROCHES.format(
+        ordre=ordre,
+        horizon="" if recherche.inclure_perimes else _HORIZON_PROCHES,
+    )
 
     async with (
         pool.connection(timeout=DELAI_CONNEXION) as connexion,

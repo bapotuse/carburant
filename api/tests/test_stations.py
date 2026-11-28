@@ -612,3 +612,119 @@ async def test_meta_annonce_un_ordre_de_grandeur_credible(
     assert estime == pytest.approx(reel, rel=0.1), (
         f"estimation {estime} contre {reel} lignes reellement presentes"
     )
+
+
+# ------------------------------------------------------- horizon de recherche
+@sans_base
+async def test_l_horizon_n_exclut_que_des_prix_deja_ecartes(base: str) -> None:
+    """La borne basse sur `maj` ne doit rien changer au resultat.
+
+    C'est la condition de la correction de performance : l'horizon est place un jour
+    **avant** le seuil de peremption, donc tout prix qu'il exclut aurait de toute
+    facon ete ecarte par `fraicheur <> 'perime'`. Le test l'exige de la base
+    elle-meme, plutot que de faire confiance a l'arithmetique du commentaire -- une
+    modification du seuil de peremption sans l'horizon ferait echouer ce test.
+    """
+    with psycopg.connect(base, autocommit=True) as connexion:
+        ligne = connexion.execute(
+            """
+            SELECT marts.classe_fraicheur(marts.horizon_prix_exploitable()) AS a_l_horizon,
+                   marts.classe_fraicheur(
+                       marts.horizon_prix_exploitable() + interval '1 day'
+                   ) AS un_jour_apres
+            """
+        ).fetchone()
+    assert ligne is not None
+    assert ligne[0] == "perime", (
+        "un prix pose exactement a l'horizon doit deja etre perime, sinon l'horizon "
+        "ecarte des prix que la recherche aurait gardes"
+    )
+    assert ligne[1] != "perime", (
+        "un jour apres l'horizon, le prix doit encore etre exploitable : sinon "
+        "l'horizon est inutilement large"
+    )
+
+
+@sans_base
+async def test_l_horizon_elague_les_partitions(base: str) -> None:
+    """Le plan ne doit pas toucher une partition entierement anterieure a l'horizon.
+
+    C'est tout l'objet de l'horizon, et c'est ce qui a sauve la recherche apres
+    l'amorcage : sans lui, le plan fait un parcours d'index par station candidate
+    **et par partition**, 242 en production.
+
+    Le test cree donc une vraie partition ancienne et exige qu'elle soit absente du
+    plan. Mesurer un temps de reponse ne prouverait rien sur une base de test, et
+    compter les partitions du plan non plus : le jeu d'essai n'en cree que trois, si
+    bien qu'un plan non elague y ressemblerait a un plan elague.
+    """
+    from carburant_api.requetes.stations import _HORIZON_PROCHES, _ORDRES, _SQL_PROCHES
+
+    requete = _SQL_PROCHES.format(ordre=_ORDRES["prix"], horizon=_HORIZON_PROCHES)
+    with psycopg.connect(base, autocommit=True) as connexion:
+        connexion.execute(
+            "CREATE TABLE marts.fact_prix_202401 PARTITION OF marts.fact_prix "
+            "FOR VALUES FROM ('2024-01-01T00:00:00+00') TO ('2024-02-01T00:00:00+00')"
+        )
+        connexion.execute(
+            "INSERT INTO marts.fact_prix "
+            "(station_id, carburant, prix, maj, premiere_collecte, derniere_observation) "
+            "VALUES (1, 'gazole', 1.5, '2024-01-15T12:00:00+00', 1, now())"
+        )
+        # L'elagage se fait a l'execution : `now()` n'est connu qu'a ce moment-la.
+        plan = "\n".join(
+            str(ligne[0])
+            for ligne in connexion.execute(
+                f"EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) {requete}",
+                {
+                    "lat": 43.2726,
+                    "lon": 5.3846,
+                    "rayon_m": 10000.0,
+                    "carburant": "gazole",
+                    "inclure_perimes": False,
+                },
+            ).fetchall()
+        )
+
+    assert "fact_prix_202401" not in plan, (
+        "la recherche lit une partition de janvier 2024, entierement anterieure a "
+        f"l'horizon : l'elagage ne fonctionne pas.\nPlan obtenu :\n{plan}"
+    )
+
+
+@sans_base
+async def test_demander_les_perimes_les_ramene(base: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """L'autre moitie de l'assemblage : sans horizon, les perimes reviennent.
+
+    `inclure_perimes` n'a aucun appelant aujourd'hui, mais la requete est assemblee
+    autour de lui : si l'assemblage se cassait, personne ne le verrait. La station 3
+    du jeu d'essai a un prix de soixante jours.
+    """
+    from carburant_api.requetes.connexion import creer_pool
+    from carburant_api.requetes.stations import Recherche, stations_proches
+
+    def recherche(*, perimes: bool) -> Recherche:
+        return Recherche(
+            latitude=43.2726,
+            longitude=5.3846,
+            rayon_km=10,
+            carburant="gazole",
+            tri="prix",
+            limite=50,
+            decalage=0,
+            inclure_perimes=perimes,
+        )
+
+    monkeypatch.setenv("DATABASE_URL", base)
+    pool = creer_pool()
+    await pool.open(wait=True)
+    try:
+        sans = await stations_proches(pool, recherche(perimes=False))
+        avec = await stations_proches(pool, recherche(perimes=True))
+    finally:
+        await pool.close()
+
+    identifiants_sans = {ligne["id"] for ligne in sans[0]}
+    identifiants_avec = {ligne["id"] for ligne in avec[0]}
+    assert 3 not in identifiants_sans, "la station au prix perime doit etre absente"
+    assert 3 in identifiants_avec, "elle doit revenir quand on demande les perimes"

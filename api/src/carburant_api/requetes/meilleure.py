@@ -68,6 +68,15 @@ dernier_prix AS (
       FROM marts.fact_prix f
       JOIN candidates c ON c.id = f.station_id
      WHERE f.carburant = %(carburant)s::text
+       -- Borne basse indispensable : sans elle, cette recherche fait un parcours
+       -- d'index par station candidate et par partition -- 242 apres l'amorcage de
+       -- l'historique -- puis trie vingt ans de changements de prix pour en garder
+       -- un. Avec elle, PostgreSQL elague et il en reste trois.
+       --
+       -- Elle ne change rien au resultat : la clause `fraicheur <> 'perime'` plus bas
+       -- ecartait deja tout ce que l'horizon exclut, celui-ci etant place un jour
+       -- avant le seuil de peremption (`infra/migrations/011_horizon_recherche.sql`).
+       AND f.maj >= marts.horizon_prix_exploitable()
      ORDER BY f.station_id, f.maj DESC
 )
 SELECT c.*, p.prix, p.maj, p.fraicheur,

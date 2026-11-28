@@ -81,6 +81,24 @@ jobs:
               SELECT 'base: ' || pg_size_pretty(pg_database_size('carburant'));
             \""
 
+      - name: Combien coute vraiment un comptage complet
+        # Confirmation chiffree de l'incident du 28/11/2026 : c'est ce `count(*)`,
+        # heberge dans `/v1/meta`, qui depassait les quatre secondes du healthcheck et
+        # a fait echouer un deploiement. On le chronometre ici, une fois, pour que le
+        # diagnostic repose sur une mesure et non sur un raisonnement. Les deux
+        # chiffres doivent se ressembler ; seuls les temps doivent differer.
+        run: |
+          set -eu
+          ssh vps-carburant "cd /opt/carburant && sudo docker compose -f compose.prod.yaml \
+            exec -T db psql -U carburant -f -" <<'SQL' | tee /tmp/comptage.txt
+          \timing on
+          SELECT count(*) AS comptage_exact FROM marts.fact_prix;
+          SELECT coalesce(sum(greatest(c.reltuples, 0)), 0)::bigint AS estimation
+            FROM pg_class c
+            JOIN pg_inherits i ON i.inhrelid = c.oid
+           WHERE i.inhparent = 'marts.fact_prix'::regclass;
+          SQL
+
       - name: Mesurer dans le conteneur de l'API
         # Le script est copie plutot que monte : `docker compose exec` ne cree pas de
         # montage, et le conteneur de production ne contient pas le depot.
@@ -114,6 +132,12 @@ jobs:
           set -eu
           {
             echo '## Temps de reponse mesures sur le VPS'
+            echo
+            echo '### Comptage exact contre estimation (incident du 28/11/2026)'
+            echo
+            echo '```'
+            cat /tmp/comptage.txt 2>/dev/null || echo 'mesure non effectuee'
+            echo '```'
             echo
             echo '### Dans le conteneur de l API (Caddy, TLS et internet exclus)'
             echo
