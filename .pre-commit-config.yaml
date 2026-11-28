@@ -41,13 +41,26 @@ repos:
 
   - repo: local
     hooks:
-      - id: mypy
-        name: mypy --strict
-        entry: uv run mypy --strict
+      # Un paquet a la fois : `etl/tests` et `mcp/tests` ont chacun un `__init__.py`
+      # et mypy refuse deux modules nommes « tests » dans la meme invocation.
+      - id: mypy-etl
+        name: mypy --strict etl
+        entry: uv run mypy --strict etl
         language: system
         types: [python]
         pass_filenames: false
-        args: [etl, api, mcp]
+      - id: mypy-api
+        name: mypy --strict api
+        entry: uv run mypy --strict api
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: mypy-mcp
+        name: mypy --strict mcp
+        entry: uv run mypy --strict mcp
+        language: system
+        types: [python]
+        pass_filenames: false
 
       # Les chemins arrivent depuis la racine du depot (`web/app/...`) alors que ces
       # outils tournent depuis `web/` : on retire le prefixe avec `${@#web/}`.

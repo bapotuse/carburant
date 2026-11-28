@@ -59,7 +59,13 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Typage strict
-        run: uv run mypy --strict etl api mcp
+        # Un paquet a la fois : `etl/tests` et `mcp/tests` ont chacun un `__init__.py`
+        # (pour que pytest distingue leurs deux `test_carburants.py`, et pour que le
+        # dossier `mcp/` ne masque pas le SDK), et mypy refuse deux modules « tests ».
+        run: |
+          uv run mypy --strict etl
+          uv run mypy --strict api
+          uv run mypy --strict mcp
 
       - name: Tests
         run: uv run pytest

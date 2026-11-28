@@ -1,0 +1,114 @@
+{
+ "stations": [
+  {
+   "id": 13008017,
+   "adresse": "265 AVENUE DE MAZARGUES",
+   "ville": "Marseille",
+   "cp": "13008",
+   "departement": "Bouches-du-Rhône",
+   "code_departement": "13",
+   "autoroute": false,
+   "latitude": 43.263,
+   "longitude": 5.393,
+   "distance_km": 1.266,
+   "prix": [
+    {
+     "carburant": "gazole",
+     "prix_eur_l": 1.99,
+     "maj": "2026-11-23T23:01:00Z",
+     "fraicheur": "recent",
+     "rupture": null
+    }
+   ]
+  },
+  {
+   "id": 13009008,
+   "adresse": "32 BOULEVARD SCHLOESING",
+   "ville": "Marseille",
+   "cp": "13009",
+   "departement": "Bouches-du-Rhône",
+   "code_departement": "13",
+   "autoroute": false,
+   "latitude": 43.272,
+   "longitude": 5.401,
+   "distance_km": 1.333,
+   "prix": [
+    {
+     "carburant": "gazole",
+     "prix_eur_l": 1.99,
+     "maj": "2026-11-23T23:01:00Z",
+     "fraicheur": "recent",
+     "rupture": null
+    }
+   ]
+  },
+  {
+   "id": 13010011,
+   "adresse": "171 BD PAUL CLAUDEL",
+   "ville": "Marseille",
+   "cp": "13010",
+   "departement": "Bouches-du-Rhône",
+   "code_departement": "13",
+   "autoroute": false,
+   "latitude": 43.268,
+   "longitude": 5.415,
+   "distance_km": 2.52,
+   "prix": [
+    {
+     "carburant": "gazole",
+     "prix_eur_l": 1.99,
+     "maj": "2026-11-23T23:01:00Z",
+     "fraicheur": "recent",
+     "rupture": null
+    }
+   ]
+  },
+  {
+   "id": 13005013,
+   "adresse": "ANGLE BD CHAVE ET SAKAKINI",
+   "ville": "Marseille",
+   "cp": "13005",
+   "departement": "Bouches-du-Rhône",
+   "code_departement": "13",
+   "autoroute": false,
+   "latitude": 43.295,
+   "longitude": 5.4,
+   "distance_km": 2.785,
+   "prix": [
+    {
+     "carburant": "gazole",
+     "prix_eur_l": 1.99,
+     "maj": "2026-11-23T23:01:00Z",
+     "fraicheur": "recent",
+     "rupture": null
+    }
+   ]
+  },
+  {
+   "id": 13004005,
+   "adresse": "70 BD FRANCOISE DUPARC",
+   "ville": "Marseille",
+   "cp": "13004",
+   "departement": "Bouches-du-Rhône",
+   "code_departement": "13",
+   "autoroute": false,
+   "latitude": 43.304,
+   "longitude": 5.401,
+   "distance_km": 3.734,
+   "prix": [
+    {
+     "carburant": "gazole",
+     "prix_eur_l": 1.99,
+     "maj": "2026-11-23T23:01:00Z",
+     "fraicheur": "recent",
+     "rupture": null
+    }
+   ]
+  }
+ ],
+ "total": 31,
+ "rayon_km": 5.0,
+ "carburant": "gazole",
+ "tri": "prix",
+ "derniere_collecte": "2026-11-26T09:10:08.216510Z"
+}

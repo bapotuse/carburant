@@ -1,0 +1,17 @@
+{
+ "carburant": "gazole",
+ "dimension": "france",
+ "valeur": "",
+ "jours": 30,
+ "points": [
+  {
+   "jour": "2026-11-24",
+   "stations": 9379,
+   "exclus": 72,
+   "prix_min_eur_l": 1.833,
+   "prix_median_eur_l": 2.099,
+   "prix_moyen_eur_l": 2.113,
+   "prix_max_eur_l": 2.46
+  }
+ ]
+}

@@ -69,7 +69,13 @@ format: ## Verifie le formatage (ne modifie rien)
 	$(PNPM) format:check
 
 typage: ## Typage Python strict et front
-	$(UV) mypy --strict etl api mcp
+	@# Un paquet a la fois, et ce n'est pas un detail : `etl/tests` et `mcp/tests`
+	@# portent tous deux un `__init__.py` -- necessaire pour que pytest ne confonde
+	@# pas leurs deux `test_carburants.py`, et pour que `mcp/` ne masque pas le SDK.
+	@# Vus ensemble, mypy les nomme tous deux « tests » et refuse de continuer.
+	$(UV) mypy --strict etl
+	$(UV) mypy --strict api
+	$(UV) mypy --strict mcp
 	$(PNPM) typecheck
 
 test: test-python test-front ## Toute la suite de tests
