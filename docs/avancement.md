@@ -89,7 +89,7 @@ prix sur la periode.
 | 8 | **Ouvrir le site sur son iPhone** et essayer « Ma position », en 4G et en wifi | confiance dans le parcours mobile réel | ⏳ demandé le 25/11 |
 | 6 | Compte healthchecks.io | Jalon 6 : alertes | 🔜 plus tard |
 | 7 | Compte PyPI + 2FA | publier le paquet MCP sous son nom court | 🔜 utile, pas bloquant : `uvx` marche deja depuis le dépôt git |
-| 9 | **[VALIDATION] Nom du paquet MCP** | rien — `prix-carburant-mcp` s'applique par défaut | ⏳ demandé le 28/11 |
+| 9 | **[VALIDATION] Nom du paquet MCP** | — | ✅ **`prix-carburant-mcp`**, validé le 28/11/2026 (« ok » sur la recommandation) |
 
 **Validation de goût encore ouverte** : la paire typographique. La **paire B**
 (Newsreader + Source Sans 3) est appliquée par défaut faute d'objection ; les paires A
@@ -229,8 +229,7 @@ par l'ETL si l'accueil l'affiche côté serveur (Jalon 5).
 liaison internet comprise. Ce chiffre-là n'est pas une propriété du code.
 
 ### J4 — Serveur MCP
-- [ ] 🎨 **[VALIDATION]** Nom du package — six noms vérifiés libres sur PyPI, question
-      posée dans le bilan ; `prix-carburant-mcp` s'applique par défaut
+- [x] **[VALIDATION]** Nom du package — **`prix-carburant-mcp`**, validé le 28/11/2026
 - [x] Package, tools, transport stdio, transport Streamable HTTP déployé — 28/11/2026,
       six outils, les deux transports, route `/mcp` derrière Caddy
 - [x] Tests en mémoire — 28/11/2026, 21 tests passant par le vrai protocole
@@ -241,7 +240,7 @@ liaison internet comprise. Ce chiffre-là n'est pas une propriété du code.
       28/11/2026, job « Le connecteur MCP distant » vert
 
 Sortie : `uvx …` fonctionne depuis une machine propre ; la question du Prado obtient une réponse juste via un vrai client MCP, en local et en distant.
-**Atteinte le 28/11/2026**, à la validation du nom près. Deux clients indépendants
+**Atteinte le 28/11/2026.** Deux clients indépendants
 interrogent le connecteur distant après chaque déploiement : le client officiel du SDK
 et MCP Inspector en mode CLI. La question du cadrage, « je suis au Prado à Marseille »,
 obtient bien une **demande de précision** — cinq candidats, dont l'avenue du Prado en
