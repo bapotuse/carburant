@@ -106,6 +106,85 @@ Même chose pour les carburants : « diesel », « sans plomb 95 », « E10 » e
 sont compris, mais **« super » et « essence » sont refusés** — ils désignent plusieurs
 carburants, et deviner afficherait un prix faux sans le dire.
 
+## Cinq conversations, tirées de vrais appels
+
+Les sorties ci-dessous sont **copiées de la production**, pas écrites à la main : elles
+viennent du job qui interroge le connecteur distant après chaque déploiement
+(`infra/scripts/verifier-mcp-distant.py`). La formulation finale de l'assistant varie,
+les chiffres non.
+
+### 1. « Je suis au Prado à Marseille, où est l'essence la moins chère ? »
+
+Le serveur **refuse de choisir** — et c'est la bonne réponse :
+
+> « le Prado, Marseille » peut designer plusieurs endroits : Allée prado bleu 13008
+> Marseille (13008) ; Avenue du prado 13008 Marseille (13008) ; Avenue du prado 13006
+> Marseille (13006) ; Tunnel prado sud–argile 13010 Marseille (13010) ; Tunnel carenage
+> prado 13006 Marseille (13006). Demande lequel avant de donner des prix : deux
+> candidats peuvent etre a un kilometre l'un de l'autre et n'avoir aucune station en
+> commun.
+
+L'assistant demande alors lequel. Deviner aurait donné les prix d'un autre quartier
+sans que personne ne s'en aperçoive.
+
+### 2. « 40 avenue du Prado, 13006 Marseille — du gazole »
+
+Avec une adresse précise, la réponse sort :
+
+```json
+{
+  "lieu": "40 Avenue du prado 13006 Marseille",
+  "carburant": "gazole",
+  "rayon_km": 5.0,
+  "stations": [
+    {
+      "id": 13009008,
+      "adresse": "32 BOULEVARD SCHLOESING",
+      "ville": "Marseille",
+      "prix_affiche": "1,919 €/L",
+      "distance_affichee": "1,9 km",
+      "maj_affichee": "il y a 16 heures"
+    }
+  ]
+}
+```
+
+`maj_affichee` est là à chaque fois. C'est ce qui empêche l'assistant de dire « l'essence
+est à 1,919 € » trois jours plus tard.
+
+### 3. « Combien de CO2 pour un plein de 50 L de gazole ? »
+
+```json
+{
+  "litres": 50.0,
+  "co2_kg": 155.0,
+  "facteur_kg_co2e_par_litre": 3.1,
+  "source": {
+    "libelle_ademe": "Gazole routier / B7",
+    "unite": "kgCO2e/litre",
+    "localisation": "France continentale",
+    "statut": "Valide générique",
+    "periode_validite": "déc-20"
+  }
+}
+```
+
+Le facteur ne sort **jamais** sans sa provenance complète, version du jeu de données et
+URL comprises.
+
+### 4. « Il me reste 20 km d'autonomie, où faire le plein ? »
+
+Le serveur classe par **coût réel**, détour compris, et ne propose que des stations
+atteignables — avec une marge de 20 % sur l'autonomie annoncée. La réponse porte les
+trois hypothèses du calcul (`hypotheses`), à citer si on demande d'où sort le chiffre.
+Si rien n'est atteignable, elle le dit plutôt que de proposer une station hors de portée.
+
+### 5. « Essence ou diesel ? »
+
+Les six carburants côte à côte, prix local et CO2 — et un avertissement que l'assistant
+doit relayer : un litre d'E85 ne fait pas la même distance qu'un litre de gazole, donc
+comparer les prix au litre ne compare pas les coûts d'usage.
+
 ## Ce que ces données ne contiennent pas
 
 - **Aucune station d'outre-mer** : le flux officiel n'en publie pas.

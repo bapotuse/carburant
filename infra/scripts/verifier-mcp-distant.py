@@ -99,6 +99,42 @@ async def verifier(url: str) -> int:
         elif "13006" not in _texte(resultat):
             echecs.append("le refus ne nomme pas les candidats")
 
+        # 4. La seconde question du cadrage : « J'ai 20 km d'autonomie ».
+        resultat = await session.call_tool(
+            "meilleure_station_avec_autonomie",
+            {
+                "lieu": "40 avenue du Prado, 13006 Marseille",
+                "carburant": "gazole",
+                "autonomie_km": 20,
+            },
+        )
+        print("\n--- meilleure_station_avec_autonomie (20 km d'autonomie)")
+        print(_texte(resultat)[:800])
+        if resultat.is_error:
+            echecs.append("la meilleure station a echoue avec 20 km d'autonomie")
+        else:
+            structure = resultat.structured_content or {}
+            if not structure.get("hypotheses"):
+                echecs.append("le cout reel est rendu sans ses hypotheses")
+            if (structure.get("economie_eur") or 0) < 0:
+                echecs.append("une economie negative a ete rendue")
+
+        # 5. La comparaison des six carburants, avec son avertissement.
+        resultat = await session.call_tool(
+            "comparer_carburants",
+            {"lieu": "40 avenue du Prado, 13006 Marseille", "litres": 50},
+        )
+        print("\n--- comparer_carburants")
+        print(_texte(resultat)[:900])
+        if resultat.is_error:
+            echecs.append("la comparaison des carburants a echoue")
+        else:
+            structure = resultat.structured_content or {}
+            if len(structure.get("carburants") or []) != 6:
+                echecs.append("la comparaison ne porte pas sur les six carburants")
+            if not structure.get("avertissement"):
+                echecs.append("la comparaison ne dit pas ce qu'elle ne dit pas")
+
     if echecs:
         print("\nECHECS :", file=sys.stderr)
         for echec in echecs:

@@ -1,23 +1,33 @@
 # Avancement
 
 ## Prochaine action
-**Finir le Jalon 4.** Le serveur MCP tourne et est deploye ; il reste le smoke test
-MCP Inspector en mode CLI, le README avec cinq conversations reelles, et un essai de
-bout en bout contre la production. La validation du nom du package ne bloque rien :
-`prix-carburant-mcp` s'applique par defaut.
+**Le Jalon 5, le site complet.** Il commence par une validation de gout : les maquettes
+mobiles de l'accueil et de la carte. Avant d'ecrire du Vue, relire `docs/specs/web.md`
+et `docs/anti-patterns-ia.md`, puis produire les maquettes et les soumettre.
 
-Puis le **Jalon 5, le site complet**, qui commence par deux validations de gout (les
-maquettes mobiles de l'accueil et de la carte, puis les objets 3D).
+Premiere tache technique du jalon, independante du gout : la page **fiche station**, qui
+a deja son endpoint (`/v1/stations/{id}`) et son historique. Puis la carte.
+
+Deux choses a reprendre quand le site affichera les anecdotes : `/v1/anecdotes/du-jour`
+met **1,1 s**, parce que l'effet du jour de la semaine se recalcule sur 7 299 jours a
+chaque appel. Si l'accueil l'affiche cote serveur, il faut une table calculee par l'ETL.
+Et le lien vers la fiche d'une station doit entrer dans les reponses MCP : il en est
+absent parce que la page n'existait pas.
 
 Rappel pour la reprise : lire `docs/reconnaissance.md` avant de toucher aux seuils, et
 `docs/decisions.md` avant de refaire un choix deja tranche.
 
-**Les Jalons 2 et 3 sont termines.** L'historique complet est en base sur le VPS :
-**64 062 124 changements de prix** du 01/01/2007 au 26/11/2026, **242 partitions**,
-partition DEFAULT a **0 ligne**, **3 836 872 lignes d'agregat** sur **7 299 jours**,
-base a **8 477 Mo**, neuf controles qualite au vert. 3 h 20 de bout en bout.
-L'API est complete : onze routes, p95 de `/v1/stations/proches` a **33,5 ms** sur le
-VPS pour un budget de 300 ms.
+**Les Jalons 2, 3 et 4 sont termines.**
+
+- **J2** : l'historique complet est en base sur le VPS, **64 062 124 changements de
+  prix** du 01/01/2007 au 26/11/2026, **242 partitions**, partition DEFAULT a
+  **0 ligne**, **3 836 872 lignes d'agregat** sur **7 299 jours**, base a **8 477 Mo**,
+  neuf controles qualite au vert. 3 h 20 de bout en bout.
+- **J3** : onze routes, contrat audite (34 schemas, aucun manque), p95 de
+  `/v1/stations/proches` a **33,5 ms** sur le VPS pour un budget de 300 ms.
+- **J4** : six outils MCP, les deux transports, connecteur distant en ligne sur
+  <https://carburant.144-24-195-97.sslip.io/mcp>, verifie apres chaque deploiement par
+  **deux clients independants** -- celui du SDK officiel et MCP Inspector.
 
 **L'amorcage a casse trois choses, et c'est la partie interessante.** Les trois
 auraient ete invisibles sans l'avoir fait tourner en vrai.
@@ -42,6 +52,11 @@ auraient ete invisibles sans l'avoir fait tourner en vrai.
    production une fois qu'elle etait assez rapide pour etre lisible. La base se repare
    maintenant d'elle-meme a chaque collecte, et un neuvieme controle qualite pose la
    question -- aucun ne la posait pour les agregats.
+
+**Trois outils tiers ont trouve ce que mes tests ne voyaient pas** : le plan
+d'execution de PostgreSQL, la lecture du SDK MCP installe (cinq ecarts avec ma memoire,
+dont une protection anti-reliage DNS qui aurait fait refuser toutes les requetes), et
+MCP Inspector, qui passe `zone=13` en entier la ou tous mes tests passaient des chaines.
 
 **Deux de mes propres tests passaient pour de mauvaises raisons** et ont ete reecrits
 sur la vraie propriete : celui du dossier `mcp/` comparait une chaine vide et passait
@@ -70,14 +85,15 @@ prix sur la periode.
 | 5 | Trois secrets GitHub `VPS_HOST`, `VPS_USER`, `VPS_CLE_PRIVEE` | mise en ligne | ✅ fait le 25/11/2026 |
 | 8 | **Ouvrir le site sur son iPhone** et essayer « Ma position », en 4G et en wifi | confiance dans le parcours mobile réel | ⏳ demandé le 25/11 |
 | 6 | Compte healthchecks.io | Jalon 6 : alertes | 🔜 plus tard |
-| 7 | Compte PyPI + 2FA | Jalon 4 : `uvx prix-carburant-mcp` | 🔜 plus tard |
+| 7 | Compte PyPI + 2FA | publier le paquet MCP sous son nom court | 🔜 utile, pas bloquant : `uvx` marche deja depuis le dépôt git |
+| 9 | **[VALIDATION] Nom du paquet MCP** | rien — `prix-carburant-mcp` s'applique par défaut | ⏳ demandé le 28/11 |
 
 **Validation de goût encore ouverte** : la paire typographique. La **paire B**
 (Newsreader + Source Sans 3) est appliquée par défaut faute d'objection ; les paires A
 et C restent déclarées et visibles sur `/planche-de-style`. En changer coûte trois
 lignes dans `web/app/styles/tokens.css` plus le préchargement dans `nuxt.config.ts`.
 
-**Rien de tout cela ne bloque le Jalon 2**, qui commence maintenant.
+**Rien de tout cela ne bloque le Jalon 5**, qui commence maintenant.
 
 ## Jalons
 Chaque jalon se termine par : critère de sortie vérifié, bilan à Baptiste, mise à jour de comprendre-le-projet.md.
@@ -215,10 +231,19 @@ liaison internet comprise. Ce chiffre-là n'est pas une propriété du code.
 - [x] Package, tools, transport stdio, transport Streamable HTTP déployé — 28/11/2026,
       six outils, les deux transports, route `/mcp` derrière Caddy
 - [x] Tests en mémoire — 28/11/2026, 21 tests passant par le vrai protocole
-- [ ] Smoke test MCP Inspector en mode CLI
-- [ ] README avec 5 conversations réelles
+- [x] Smoke test MCP Inspector en mode CLI — 28/11/2026, branché sur le déploiement ;
+      il a trouvé un défaut que nos tests ne voyaient pas (`zone=13` en entier)
+- [x] README avec 5 conversations réelles — 28/11/2026, sorties copiées de la production
+- [x] Essai de bout en bout contre la production, avec le client MCP officiel —
+      28/11/2026, job « Le connecteur MCP distant » vert
 
 Sortie : `uvx …` fonctionne depuis une machine propre ; la question du Prado obtient une réponse juste via un vrai client MCP, en local et en distant.
+**Atteinte le 28/11/2026**, à la validation du nom près. Deux clients indépendants
+interrogent le connecteur distant après chaque déploiement : le client officiel du SDK
+et MCP Inspector en mode CLI. La question du cadrage, « je suis au Prado à Marseille »,
+obtient bien une **demande de précision** — cinq candidats, dont l'avenue du Prado en
+13006 et en 13008. Un succès serait ici un échec.
+`uvx` fonctionne depuis le dépôt git ; depuis PyPI, il faut le compte de Baptiste.
 
 ### J5 — Site complet
 - [ ] [VALIDATION] Maquettes mobiles de l'accueil et de la carte (captures)
