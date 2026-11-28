@@ -8,15 +8,16 @@ plus a jour.
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from typing import Any
 
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from carburant_api import erreurs
-from carburant_api.limite import MiddlewareLimite
+from carburant_api.limite import MiddlewareLimite, limite_configuree
 from carburant_api.requetes.connexion import creer_pool
 from carburant_api.routes import anecdotes, geocode, meta, sante, stations, tendances
 from carburant_api.version import DESCRIPTION, PREFIXE, TITRE, VERSION
@@ -59,6 +60,45 @@ async def cycle_de_vie(app: FastAPI) -> AsyncIterator[None]:
         await app.state.pool.close()
 
 
+def _documenter_la_limite(app: FastAPI) -> Callable[[], dict[str, Any]]:
+    """Declare le 429 sur toutes les routes **sauf celles que le limiteur exempte**.
+
+    Le middleware est transparent pour FastAPI : rien dans les declarations de routes
+    ne dit qu'une requete peut etre refusee pour exces de debit. Un client genere
+    depuis cet OpenAPI -- le front, le serveur MCP -- n'aurait donc aucune raison de
+    prevoir ce cas. On l'injecte apres coup.
+
+    La liste des exemptions est lue dans `MiddlewareLimite.EXEMPTS`, pas recopiee :
+    le comportement et sa documentation ne peuvent pas diverger.
+    """
+    base = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = base()
+        for chemin, operations in schema.get("paths", {}).items():
+            if chemin in MiddlewareLimite.EXEMPTS:
+                continue
+            for operation in operations.values():
+                if not isinstance(operation, dict) or "responses" not in operation:
+                    continue
+                operation["responses"].setdefault(
+                    "429",
+                    {
+                        "description": (
+                            f"Trop de requetes : la limite est de {limite_configuree()} "
+                            "par minute et par adresse. La reponse porte un en-tete "
+                            "`Retry-After` en secondes."
+                        )
+                    },
+                )
+        app.openapi_schema = schema
+        return schema
+
+    return openapi
+
+
 def creer_app() -> FastAPI:
     """Assemble l'application. Une fonction, pour pouvoir la construire en test."""
     app = FastAPI(
@@ -88,6 +128,8 @@ def creer_app() -> FastAPI:
     app.include_router(stations.routeur, prefix=PREFIXE)
     app.include_router(tendances.routeur, prefix=PREFIXE)
     app.include_router(anecdotes.routeur, prefix=PREFIXE)
+    # Apres les routeurs : la fonction doit voir tous les chemins.
+    app.openapi = _documenter_la_limite(app)  # type: ignore[method-assign]
     return app
 
 

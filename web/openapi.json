@@ -2241,6 +2241,9 @@
           },
           "422": {
             "description": "Carburant inconnu."
+          },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
           }
         },
         "summary": "Les chiffres du jour",
@@ -2298,14 +2301,13 @@
             "description": "Successful Response"
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "Carburant inconnu, ou volume hors bornes."
+          },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
+          },
+          "503": {
+            "description": "Aucun facteur d'emission n'est charge pour ce carburant. On refuse plutot que d'inventer un chiffre d'empreinte carbone."
           }
         },
         "summary": "Empreinte carbone d'un plein",
@@ -2349,14 +2351,13 @@
             "description": "Successful Response"
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "Volume hors bornes."
+          },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
+          },
+          "503": {
+            "description": "Aucun facteur d'emission n'est charge. On refuse plutot que d'inventer un chiffre d'empreinte carbone."
           }
         },
         "summary": "Empreinte comparee des six carburants",
@@ -2422,6 +2423,9 @@
             },
             "description": "Validation Error"
           },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
+          },
           "502": {
             "description": "Le geocodeur de l'IGN n'a pas repondu (problem+json)."
           }
@@ -2446,6 +2450,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
           }
         },
         "summary": "Etat des donnees et des sources",
@@ -2608,6 +2615,9 @@
           },
           "422": {
             "description": "Parametres invalides (problem+json)."
+          },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
           }
         },
         "summary": "La station au cout reel le plus bas, detour compris",
@@ -2739,6 +2749,9 @@
           },
           "422": {
             "description": "Parametres invalides (problem+json)."
+          },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
           }
         },
         "summary": "Stations autour d'un point",
@@ -2790,6 +2803,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
           }
         },
         "summary": "Fiche complete d'une station",
@@ -2896,6 +2912,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
           }
         },
         "summary": "Historique des prix d'une station",
@@ -3003,6 +3022,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Trop de requetes : la limite est de 120 par minute et par adresse. La reponse porte un en-tete `Retry-After` en secondes."
           }
         },
         "summary": "Evolution du prix d'un carburant",

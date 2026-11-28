@@ -176,6 +176,15 @@ def _en_facteur(ligne: dict[str, object]) -> FacteurEmission:
         "d'empreinte carbone sans sa source ne vaut rien."
     ),
     response_model=ReponseEmpreinte,
+    responses={
+        422: {"description": "Carburant inconnu, ou volume hors bornes."},
+        503: {
+            "description": (
+                "Aucun facteur d'emission n'est charge pour ce carburant. On refuse "
+                "plutot que d'inventer un chiffre d'empreinte carbone."
+            )
+        },
+    },
 )
 async def empreinte(
     requete: Request,
@@ -221,6 +230,15 @@ async def empreinte(
         "gazole. Le champ `avertissement` le rappelle."
     ),
     response_model=ReponseComparaison,
+    responses={
+        422: {"description": "Volume hors bornes."},
+        503: {
+            "description": (
+                "Aucun facteur d'emission n'est charge. On refuse plutot que "
+                "d'inventer un chiffre d'empreinte carbone."
+            )
+        },
+    },
 )
 async def comparaison(
     requete: Request,
