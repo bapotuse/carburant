@@ -113,6 +113,21 @@ jobs:
           ssh vps-carburant "sudo docker exec carburant_api rm -f /tmp/mesurer-p95.py; \
             rm -f /tmp/mesurer-p95.py"
 
+      - name: Les anecdotes, sur vingt ans de donnees
+        # L'anecdote « jour de la semaine le moins cher » exige 52 semaines
+        # d'historique pour chacun des sept jours. Elle etait donc **indisponible**
+        # partout jusqu'ici, et sa seule verification possible etait un jeu de test
+        # synthetique. Avec vingt ans en base, elle doit enfin sortir. On imprime la
+        # reponse pour la lire, pas pour la chronometrer.
+        run: |
+          set -eu
+          scp infra/scripts/anecdotes-du-jour.py vps-carburant:/tmp/anecdotes.py
+          ssh vps-carburant "sudo docker cp /tmp/anecdotes.py carburant_api:/tmp/anecdotes.py"
+          ssh vps-carburant "sudo docker exec carburant_api python /tmp/anecdotes.py" \
+            | tee /tmp/anecdotes.txt
+          ssh vps-carburant "sudo docker exec carburant_api rm -f /tmp/anecdotes.py; \
+            rm -f /tmp/anecdotes.py"
+
       - name: Mesurer a travers Caddy, depuis le runner
         # Sans budget : la latence runner GitHub -> VPS n'est pas une propriete de
         # notre code. Informatif, pour savoir ce qu'un visiteur ressent.
@@ -143,6 +158,12 @@ jobs:
             echo
             echo '```'
             cat /tmp/interne.txt 2>/dev/null || echo 'mesure non effectuee'
+            echo '```'
+            echo
+            echo '### Les anecdotes du jour, sur vingt ans de donnees'
+            echo
+            echo '```'
+            cat /tmp/anecdotes.txt 2>/dev/null || echo 'non relevees'
             echo '```'
             echo
             echo '### A travers Caddy, depuis le runner (liaison comprise, sans budget)'
